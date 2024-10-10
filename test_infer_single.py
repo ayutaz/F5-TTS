@@ -80,6 +80,8 @@ if local:
 else:
     vocos = Vocos.from_pretrained("charactr/vocos-mel-24khz")
 
+vocos = vocos.to(device)
+
 # Tokenizer
 vocab_char_map, vocab_size = get_tokenizer(dataset_name, tokenizer)
 
@@ -153,10 +155,11 @@ print(f"Generated mel: {generated.shape}")
 # Final result
 generated = generated[:, ref_audio_len:, :]
 generated_mel_spec = rearrange(generated, '1 n d -> 1 d n')
-generated_wave = vocos.decode(generated_mel_spec.cpu())
+generated_wave = vocos.decode(generated_mel_spec)
 if rms < target_rms:
-    generated_wave = generated_wave * rms / target_rms
+    generated_wave = generated_wave * (rms / target_rms)
 
 save_spectrogram(generated_mel_spec[0].cpu().numpy(), f"{output_dir}/test_single.png")
-torchaudio.save(f"{output_dir}/test_single.wav", generated_wave, target_sample_rate)
+generated_wave_cpu = generated_wave.cpu()
+torchaudio.save(f"{output_dir}/test_single.wav", generated_wave_cpu, target_sample_rate)
 print(f"Generated wav: {generated_wave.shape}")
