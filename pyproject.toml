@@ -27,6 +27,7 @@ dependencies = [
     "matplotlib",
     "numpy<=1.26.4; python_version<='3.10'",
     "peft>=0.7.0",
+    "praat-parselmouth",
     "pydantic<=2.10.6",
     "pydub",
     "pypinyin",
