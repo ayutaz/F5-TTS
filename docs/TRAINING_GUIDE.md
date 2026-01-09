@@ -70,14 +70,19 @@ Style LoRA は、ベースの F5-TTS モデルに対して低ランク適応（L
 
 ```bash
 # Python 3.12.7
-python --version
+uv run python --version
 
 # CUDA 12.x
 nvcc --version
 
 # 依存関係インストール
 uv sync
+
+# WandB ログイン（必須）
+wandb login
 ```
+
+**注意**: 学習時のログ記録には WandB が必須です。アカウントを作成し、ログインしてください。
 
 ### ベースモデルのダウンロード
 
@@ -231,7 +236,7 @@ def label_dataset(input_dir, output_dir):
 if __name__ == "__main__":
     import sys
     if len(sys.argv) != 3:
-        print("Usage: python label_pitch_energy.py <input_dir> <output_dir>")
+        print("Usage: uv run python label_pitch_energy.py <input_dir> <output_dir>")
         sys.exit(1)
     label_dataset(sys.argv[1], sys.argv[2])
 ```
@@ -242,7 +247,7 @@ F5-TTS の学習にはArrow形式のデータセットが必要です。
 
 ```bash
 # CSV + WAV → Arrow形式
-python -m f5_tts.train.datasets.prepare_csv_wavs \
+uv run python -m f5_tts.train.datasets.prepare_csv_wavs \
     datasets/pitch_high \
     datasets/pitch_high_prepared \
     --workers 16
@@ -263,7 +268,7 @@ datasets/pitch_high_prepared/
 ### 4.1 基本コマンド
 
 ```bash
-python -m f5_tts.train.train_style_lora \
+uv run python -m f5_tts.train.train_style_lora \
     --config-name ReStyleTTS_Base \
     style_attribute=pitch_high \
     pretrained_checkpoint=checkpoints/F5TTS_v1_Base/model_1200000.safetensors \
@@ -286,7 +291,7 @@ python -m f5_tts.train.train_style_lora \
 
 ```bash
 # 高速学習（小さいLoRAランク）
-python -m f5_tts.train.train_style_lora \
+uv run python -m f5_tts.train.train_style_lora \
     --config-name ReStyleTTS_Base \
     style_attribute=angry \
     pretrained_checkpoint=checkpoints/model_1200000.safetensors \
@@ -296,7 +301,7 @@ python -m f5_tts.train.train_style_lora \
     optim.lora_learning_rate=2e-5
 
 # 高品質学習（大きいLoRAランク）
-python -m f5_tts.train.train_style_lora \
+uv run python -m f5_tts.train.train_style_lora \
     --config-name ReStyleTTS_Base \
     style_attribute=happy \
     pretrained_checkpoint=checkpoints/model_1200000.safetensors \
@@ -337,7 +342,7 @@ CHECKPOINT="checkpoints/F5TTS_v1_Base/model_1200000.safetensors"
 
 for style in "${STYLES[@]}"; do
     echo "Training $style..."
-    python -m f5_tts.train.train_style_lora \
+    uv run python -m f5_tts.train.train_style_lora \
         --config-name ReStyleTTS_Base \
         style_attribute=$style \
         pretrained_checkpoint=$CHECKPOINT \
@@ -394,7 +399,7 @@ with manager.apply_styles({"pitch_high": 1.0, "angry": 0.5}, use_olora=True):
 Gradio UIを起動すると、ReStyle設定セクションでスタイルを制御できます：
 
 ```bash
-python src/f5_tts/infer/infer_gradio.py
+uv run python src/f5_tts/infer/infer_gradio.py
 ```
 
 ---
@@ -438,12 +443,11 @@ python src/f5_tts/infer/infer_gradio.py
 ### ログの確認
 
 ```bash
-# TensorBoard
-tensorboard --logdir ckpts/ReStyleTTS_Base/
+# WandB ダッシュボード
+# 学習開始後、https://wandb.ai/ でログを確認できます
 
-# WandB（設定している場合）
-wandb login
-# 学習時に自動的にログが記録される
+# TensorBoard（オプション）
+tensorboard --logdir ckpts/ReStyleTTS_Base/
 ```
 
 ---
