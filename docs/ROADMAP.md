@@ -18,7 +18,7 @@ ReStyle-TTSは、ゼロショット音声合成における連続的かつ相対
 | Phase | 機能 | 状態 | ブランチ |
 |-------|------|------|---------|
 | 1 | DCFG | ✅ 完了 | `feature/restyle-dcfg` |
-| 2 | Style LoRA | 📋 未着手 | - |
+| 2 | Style LoRA | ✅ 完了 | `feature/restyle-dcfg` |
 | 3 | OLoRA Fusion | 📋 未着手 | - |
 | 4 | TCO | 📋 未着手 | - |
 | 5 | 推論インターフェース | 📋 未着手 | - |
@@ -58,17 +58,40 @@ output, _ = model.sample(
 
 ---
 
-## Phase 2: Style LoRA 📋
+## Phase 2: Style LoRA ✅
 
 ### 目的
 各スタイル属性（ピッチ、エネルギー、感情）に特化したLoRAアダプターを学習し、連続的なスタイル制御を可能にする。
 
-### タスク
-- [ ] `peft>=0.7.0` 依存関係追加
-- [ ] `src/f5_tts/restyle/style_lora.py` - StyleLoRAManager実装
-- [ ] `src/f5_tts/train/train_style_lora.py` - LoRA訓練スクリプト
-- [ ] `src/f5_tts/configs/ReStyleTTS_Base.yaml` - 設定ファイル
-- [ ] テスト作成
+### 実装内容
+- [x] `peft>=0.7.0` 依存関係追加
+- [x] `src/f5_tts/restyle/style_lora.py` - StyleLoRAManager実装
+- [x] `src/f5_tts/train/train_style_lora.py` - LoRA訓練スクリプト
+- [x] `src/f5_tts/configs/ReStyleTTS_Base.yaml` - 設定ファイル
+- [x] `tests/test_style_lora.py` - テスト（21テストパス）
+
+### 使用方法
+```python
+from f5_tts.restyle import StyleLoRAManager, StyleLoRAConfig
+
+# マネージャー初期化
+manager = StyleLoRAManager(model.transformer)
+
+# LoRAを読み込み
+manager.load_lora("pitch_high", "path/to/pitch_high.safetensors")
+manager.load_lora("angry", "path/to/angry.safetensors")
+
+# スタイルを適用して推論
+with manager.apply_styles({"pitch_high": 1.0, "angry": 0.5}):
+    output = model.sample(...)
+```
+
+### 訓練方法
+```bash
+python -m f5_tts.train.train_style_lora --config-name ReStyleTTS_Base \
+    style_attribute=pitch_high \
+    pretrained_checkpoint=path/to/base_model.pt
+```
 
 ### スタイル属性
 | カテゴリ | 属性 |
@@ -212,5 +235,6 @@ ReStyle-TTS機能をAPI、CLI、Gradio UIから利用可能にする。
 
 | 日付 | 内容 |
 |------|------|
+| 2026-01-09 | Phase 2 (Style LoRA) 完了 |
 | 2026-01-09 | Phase 1 (DCFG) 完了 |
 | 2026-01-09 | ロードマップ作成 |
