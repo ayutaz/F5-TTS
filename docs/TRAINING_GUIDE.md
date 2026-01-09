@@ -69,10 +69,10 @@ Style LoRA は、ベースの F5-TTS モデルに対して低ランク適応（L
 ### ソフトウェア要件
 
 ```bash
-# Python 3.10-3.12
+# Python 3.12.7
 python --version
 
-# CUDA 11.8以上
+# CUDA 12.x
 nvcc --version
 
 # 依存関係インストール
