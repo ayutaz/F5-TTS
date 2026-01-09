@@ -8,6 +8,7 @@ version = "1.1.15"
 description = "F5-TTS: A Fairytaler that Fakes Fluent and Faithful Speech with Flow Matching"
 readme = "README.md"
 license = {text = "MIT License"}
+requires-python = ">=3.10,<3.13"
 classifiers = [
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
@@ -45,15 +46,15 @@ dependencies = [
     "x_transformers>=1.31.14",
 ]
 
-[project.optional-dependencies]
-eval = [
-    "faster_whisper==0.10.1",
-    "funasr",
-    "jiwer",
-    "modelscope",
-    "zhconv",
-    "zhon",
-]
+# [project.optional-dependencies]
+# eval = [
+#     "faster_whisper==0.10.1",
+#     "funasr",
+#     "jiwer",
+#     "modelscope",
+#     "zhconv",
+#     "zhon",
+# ]
 
 [project.urls]
 Homepage = "https://github.com/SWivid/F5-TTS"
@@ -63,3 +64,20 @@ Homepage = "https://github.com/SWivid/F5-TTS"
 "f5-tts_infer-gradio" = "f5_tts.infer.infer_gradio:main"
 "f5-tts_finetune-cli" = "f5_tts.train.finetune_cli:main"
 "f5-tts_finetune-gradio" = "f5_tts.train.finetune_gradio:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-cov>=4.0.0",
+]
+
+[tool.uv]
+default-groups = ["dev"]
+
+# evalオプションはPython 3.12と互換性がないため除外
+[tool.uv.sources]
+
+[[tool.uv.index]]
+name = "pytorch"
+url = "https://download.pytorch.org/whl/cu124"
+explicit = true
