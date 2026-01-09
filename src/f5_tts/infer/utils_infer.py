@@ -396,6 +396,13 @@ def infer_process(
     speed=speed,
     fix_duration=fix_duration,
     device=device,
+    # ReStyle-TTS parameters
+    use_dcfg=False,
+    lambda_t=2.0,
+    lambda_a=0.5,
+    style_weights=None,
+    use_olora=True,
+    style_lora_manager=None,
 ):
     # Split the input text into batches
     audio, sr = torchaudio.load(ref_audio)
@@ -423,6 +430,13 @@ def infer_process(
             speed=speed,
             fix_duration=fix_duration,
             device=device,
+            # ReStyle-TTS parameters
+            use_dcfg=use_dcfg,
+            lambda_t=lambda_t,
+            lambda_a=lambda_a,
+            style_weights=style_weights,
+            use_olora=use_olora,
+            style_lora_manager=style_lora_manager,
         )
     )
 
@@ -448,6 +462,13 @@ def infer_batch_process(
     device=None,
     streaming=False,
     chunk_size=2048,
+    # ReStyle-TTS parameters
+    use_dcfg=False,
+    lambda_t=2.0,
+    lambda_a=0.5,
+    style_weights=None,
+    use_olora=True,
+    style_lora_manager=None,
 ):
     audio, sr = ref_audio
     if audio.shape[0] > 1:
@@ -487,14 +508,25 @@ def infer_batch_process(
 
         # inference
         with torch.inference_mode():
-            generated, _ = model_obj.sample(
-                cond=audio,
-                text=final_text_list,
-                duration=duration,
-                steps=nfe_step,
-                cfg_strength=cfg_strength,
-                sway_sampling_coef=sway_sampling_coef,
-            )
+            # ReStyle-TTS: Apply Style LoRA if available
+            from contextlib import nullcontext
+            style_context = nullcontext()
+            if style_weights and style_lora_manager:
+                style_context = style_lora_manager.apply_styles(style_weights, use_olora=use_olora)
+
+            with style_context:
+                generated, _ = model_obj.sample(
+                    cond=audio,
+                    text=final_text_list,
+                    duration=duration,
+                    steps=nfe_step,
+                    cfg_strength=cfg_strength,
+                    sway_sampling_coef=sway_sampling_coef,
+                    # ReStyle-TTS: DCFG parameters
+                    use_dcfg=use_dcfg,
+                    lambda_t=lambda_t,
+                    lambda_a=lambda_a,
+                )
             del _
 
             generated = generated.to(torch.float32)  # generated mel spectrogram

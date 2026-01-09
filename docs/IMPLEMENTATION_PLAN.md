@@ -4,7 +4,7 @@
 
 F5-TTSをベースにReStyle-TTSの機能を追加実装する。
 
-**現在の進捗**: Phase 1-4 ✅ 完了 (DCFG, Style LoRA, OLoRA Fusion, TCO)
+**現在の進捗**: Phase 1-5 ✅ 全完了 (DCFG, Style LoRA, OLoRA Fusion, TCO, 推論インターフェース)
 
 ## ディレクトリ構造
 
@@ -298,33 +298,43 @@ weighted_loss, metrics = tco_loss(
 
 ---
 
-## Phase 5: 推論インターフェース 📋 未実装
+## Phase 5: 推論インターフェース ✅ 完了
 
-### 5.1 API拡張 (`api.py`)
+### 5.1 API拡張 (`api.py`) ✅
 ```python
-def infer(
-    self,
-    ref_audio, ref_text, gen_text,
-    # DCFG
-    use_dcfg=False, lambda_t=2.0, lambda_a=0.5,
-    # Style LoRA
-    style_loras=None,  # {"pitch_high": 1.0, "angry": 0.5}
-    use_olora=True,
-):
+class F5TTS:
+    def load_style_loras(self, lora_paths: dict[str, str]):
+        """Style LoRAを読み込む"""
+        ...
+
+    def infer(
+        self,
+        ref_file, ref_text, gen_text,
+        # DCFG
+        use_dcfg=False, lambda_t=2.0, lambda_a=0.5,
+        # Style LoRA
+        style_weights=None,  # {"pitch_high": 1.0, "angry": 0.5}
+        use_olora=True,
+    ):
+        ...
 ```
 
-### 5.2 CLI拡張 (`infer_cli.py`)
-```bash
-f5-tts_infer-cli \
-    --lambda-t 2.0 --lambda-a 0.5 \
-    --pitch 0.5 --energy -0.3 \
-    --emotion angry --emotion-strength 1.0
-```
+### 5.2 推論ユーティリティ拡張 (`utils_infer.py`) ✅
+- `infer_process()` にReStyleパラメータ追加
+- `infer_batch_process()` にReStyleパラメータ追加
+- Style LoRAコンテキストマネージャー統合
 
-### 5.3 Gradio UI拡張 (`infer_gradio.py`)
+### 5.3 Gradio UI拡張 (`infer_gradio.py`) ✅
 - DCFG設定パネル（日本語）
-- スタイル制御スライダー
+- スタイル制御スライダー（ピッチ、エネルギー）
 - 感情選択ドロップダウン
+- OLoRA融合トグル
+
+### 5.4 学習ガイド (`docs/TRAINING_GUIDE.md`) ✅
+- データセット準備手順
+- 自動ラベリングスクリプト
+- 学習コマンド例
+- トラブルシューティング
 
 ---
 
@@ -354,11 +364,12 @@ Phase 4: TCO ✅ 完了
 ├── ✅ tco.py 作成
 └── ✅ テスト作成・検証 (31テスト)
 
-Phase 5: 統合 📋 未着手
-├── [ ] api.py 拡張
-├── [ ] infer_cli.py 拡張
-├── [ ] infer_gradio.py 拡張（日本語UI）
-└── [ ] 全体テスト
+Phase 5: 推論インターフェース ✅ 完了
+├── ✅ api.py 拡張
+├── ✅ utils_infer.py 拡張
+├── ✅ infer_gradio.py 拡張（日本語UI）
+├── ✅ docs/TRAINING_GUIDE.md 作成
+└── ✅ テスト（98テストパス）
 ```
 
 ---

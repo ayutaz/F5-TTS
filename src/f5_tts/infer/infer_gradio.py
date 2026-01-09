@@ -128,7 +128,7 @@ def load_text_from_file(file):
     return gr.update(value=text)
 
 
-@lru_cache(maxsize=1000)  # NOTE. need to ensure params of infer() hashable
+# NOTE: Removed @lru_cache to support ReStyle parameters (style_weights dict is not hashable)
 @gpu_decorator
 def infer(
     ref_audio_orig,
@@ -141,6 +141,12 @@ def infer(
     nfe_step=32,
     speed=1,
     show_info=gr.Info,
+    # ReStyle-TTS parameters
+    use_dcfg=False,
+    lambda_t=2.0,
+    lambda_a=0.5,
+    style_weights=None,
+    use_olora=True,
 ):
     if not ref_audio_orig:
         gr.Warning("Please provide reference audio.")
@@ -187,6 +193,12 @@ def infer(
         speed=speed,
         show_info=show_info,
         progress=gr.Progress(),
+        # ReStyle-TTS parameters
+        use_dcfg=use_dcfg,
+        lambda_t=lambda_t,
+        lambda_a=lambda_a,
+        style_weights=style_weights,
+        use_olora=use_olora,
     )
 
     # Remove silence
@@ -269,6 +281,78 @@ with gr.Blocks() as app_tts:
             info="Set the duration of the cross-fade between audio clips.",
         )
 
+    # ReStyle-TTS Settings (Japanese UI)
+    with gr.Accordion("ReStyle設定 (ReStyle Settings)", open=False) as restyle_settn:
+        gr.Markdown("**DCFG (Decoupled Classifier-Free Guidance)**")
+        with gr.Row():
+            use_dcfg = gr.Checkbox(
+                label="DCFGを有効化 (Enable DCFG)",
+                value=False,
+                info="テキストと参照音声のガイダンスを分離します",
+                scale=1,
+            )
+        with gr.Row():
+            lambda_t_slider = gr.Slider(
+                label="テキストガイダンス (λ_t)",
+                minimum=0.0,
+                maximum=4.0,
+                value=2.0,
+                step=0.1,
+                info="テキストの影響度（高いほどテキストに忠実）",
+            )
+            lambda_a_slider = gr.Slider(
+                label="参照音声ガイダンス (λ_a)",
+                minimum=0.0,
+                maximum=2.0,
+                value=0.5,
+                step=0.1,
+                info="参照音声の影響度（0で影響なし、1.0で強い影響）",
+            )
+
+        gr.Markdown("---")
+        gr.Markdown("**スタイル制御 (Style Control)** - LoRAが読み込まれていない場合は効果がありません")
+        with gr.Row():
+            pitch_slider = gr.Slider(
+                label="ピッチ (Pitch)",
+                minimum=-2.0,
+                maximum=2.0,
+                value=0.0,
+                step=0.1,
+                info="負:低い、0:変更なし、正:高い",
+            )
+            energy_slider = gr.Slider(
+                label="エネルギー (Energy)",
+                minimum=-2.0,
+                maximum=2.0,
+                value=0.0,
+                step=0.1,
+                info="負:弱い、0:変更なし、正:強い",
+            )
+        with gr.Row():
+            emotion_dropdown = gr.Dropdown(
+                label="感情 (Emotion)",
+                choices=["なし (None)", "怒り (Angry)", "喜び (Happy)", "悲しみ (Sad)",
+                         "恐怖 (Fear)", "嫌悪 (Disgusted)", "驚き (Surprised)"],
+                value="なし (None)",
+                info="適用する感情スタイル",
+                scale=2,
+            )
+            emotion_strength_slider = gr.Slider(
+                label="感情強度 (Emotion Strength)",
+                minimum=0.0,
+                maximum=2.0,
+                value=0.0,
+                step=0.1,
+                info="感情の強さ（0で効果なし）",
+                scale=2,
+            )
+        with gr.Row():
+            use_olora = gr.Checkbox(
+                label="OLoRA融合を使用 (Use OLoRA Fusion)",
+                value=True,
+                info="複数スタイル適用時の干渉を軽減します",
+            )
+
     def collapse_accordion():
         return gr.Accordion(open=False)
 
@@ -283,6 +367,20 @@ with gr.Blocks() as app_tts:
     audio_output = gr.Audio(label="Synthesized Audio")
     spectrogram_output = gr.Image(label="Spectrogram")
 
+    # Helper function to convert emotion dropdown to style weight key
+    def emotion_to_style_key(emotion_str):
+        """Convert Japanese emotion label to style weight key"""
+        mapping = {
+            "なし (None)": None,
+            "怒り (Angry)": "angry",
+            "喜び (Happy)": "happy",
+            "悲しみ (Sad)": "sad",
+            "恐怖 (Fear)": "fear",
+            "嫌悪 (Disgusted)": "disgusted",
+            "驚き (Surprised)": "surprised",
+        }
+        return mapping.get(emotion_str)
+
     @gpu_decorator
     def basic_tts(
         ref_audio_input,
@@ -294,9 +392,38 @@ with gr.Blocks() as app_tts:
         cross_fade_duration_slider,
         nfe_slider,
         speed_slider,
+        # ReStyle-TTS parameters
+        use_dcfg,
+        lambda_t_slider,
+        lambda_a_slider,
+        pitch_slider,
+        energy_slider,
+        emotion_dropdown,
+        emotion_strength_slider,
+        use_olora,
     ):
         if randomize_seed:
             seed_input = np.random.randint(0, 2**31 - 1)
+
+        # Build style_weights dict from sliders
+        style_weights = {}
+        if pitch_slider != 0.0:
+            if pitch_slider > 0:
+                style_weights["pitch_high"] = pitch_slider
+            else:
+                style_weights["pitch_low"] = -pitch_slider
+        if energy_slider != 0.0:
+            if energy_slider > 0:
+                style_weights["energy_high"] = energy_slider
+            else:
+                style_weights["energy_low"] = -energy_slider
+
+        emotion_key = emotion_to_style_key(emotion_dropdown)
+        if emotion_key and emotion_strength_slider > 0:
+            style_weights[emotion_key] = emotion_strength_slider
+
+        # Only pass style_weights if not empty
+        final_style_weights = style_weights if style_weights else None
 
         audio_out, spectrogram_path, ref_text_out, used_seed = infer(
             ref_audio_input,
@@ -308,6 +435,12 @@ with gr.Blocks() as app_tts:
             cross_fade_duration=cross_fade_duration_slider,
             nfe_step=nfe_slider,
             speed=speed_slider,
+            # ReStyle-TTS parameters
+            use_dcfg=use_dcfg,
+            lambda_t=lambda_t_slider,
+            lambda_a=lambda_a_slider,
+            style_weights=final_style_weights,
+            use_olora=use_olora,
         )
         return audio_out, spectrogram_path, ref_text_out, used_seed
 
@@ -341,6 +474,15 @@ with gr.Blocks() as app_tts:
             cross_fade_duration_slider,
             nfe_slider,
             speed_slider,
+            # ReStyle-TTS parameters
+            use_dcfg,
+            lambda_t_slider,
+            lambda_a_slider,
+            pitch_slider,
+            energy_slider,
+            emotion_dropdown,
+            emotion_strength_slider,
+            use_olora,
         ],
         outputs=[audio_output, spectrogram_output, ref_text_input, seed_input],
     )

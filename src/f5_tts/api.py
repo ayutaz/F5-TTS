@@ -83,6 +83,34 @@ class F5TTS:
             model_cls, model_arc, ckpt_file, self.mel_spec_type, vocab_file, self.ode_method, self.use_ema, self.device
         )
 
+        # ReStyle-TTS: Style LoRA manager (lazy initialization)
+        self.style_lora_manager = None
+
+    def load_style_loras(self, lora_paths: dict[str, str]):
+        """
+        Style LoRAを読み込む
+
+        Args:
+            lora_paths: スタイル名とLoRAファイルパスの辞書
+                例: {"pitch_high": "path/to/pitch_high.safetensors", "angry": "path/to/angry.safetensors"}
+        """
+        from f5_tts.restyle import StyleLoRAManager, OLoRAConfig
+
+        if self.style_lora_manager is None:
+            self.style_lora_manager = StyleLoRAManager(
+                self.ema_model.transformer,
+                olora_config=OLoRAConfig()
+            )
+
+        for style_name, path in lora_paths.items():
+            self.style_lora_manager.load_lora(style_name, path)
+
+    def get_loaded_styles(self) -> list[str]:
+        """読み込まれているスタイル名のリストを取得"""
+        if self.style_lora_manager is None:
+            return []
+        return self.style_lora_manager.get_loaded_styles()
+
     def transcribe(self, ref_audio, language=None):
         return transcribe(ref_audio, language)
 
@@ -113,6 +141,13 @@ class F5TTS:
         file_wave=None,
         file_spec=None,
         seed=None,
+        # ReStyle-TTS: DCFG parameters
+        use_dcfg=False,
+        lambda_t=2.0,
+        lambda_a=0.5,
+        # ReStyle-TTS: Style LoRA parameters
+        style_weights: dict[str, float] | None = None,
+        use_olora=True,
     ):
         if seed is None:
             seed = random.randint(0, sys.maxsize)
@@ -138,6 +173,13 @@ class F5TTS:
             speed=speed,
             fix_duration=fix_duration,
             device=self.device,
+            # ReStyle-TTS parameters
+            use_dcfg=use_dcfg,
+            lambda_t=lambda_t,
+            lambda_a=lambda_a,
+            style_weights=style_weights,
+            use_olora=use_olora,
+            style_lora_manager=self.style_lora_manager,
         )
 
         if file_wave is not None:

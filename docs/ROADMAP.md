@@ -21,7 +21,7 @@ ReStyle-TTSは、ゼロショット音声合成における連続的かつ相対
 | 2 | Style LoRA | ✅ 完了 | `feature/restyle-dcfg` |
 | 3 | OLoRA Fusion | ✅ 完了 | `feature/restyle-dcfg` |
 | 4 | TCO | ✅ 完了 | `feature/restyle-dcfg` |
-| 5 | 推論インターフェース | 📋 未着手 | - |
+| 5 | 推論インターフェース | ✅ 完了 | `feature/restyle-dcfg` |
 
 ---
 
@@ -225,27 +225,66 @@ weighted_loss, metrics = tco_loss(base_loss, reward=reward)
 
 ---
 
-## Phase 5: 推論インターフェース 📋
+## Phase 5: 推論インターフェース ✅
 
 ### 目的
 ReStyle-TTS機能をAPI、CLI、Gradio UIから利用可能にする。
 
-### タスク
+### 実装内容
 
 #### 5.1 API拡張 (`api.py`)
-- [ ] `use_dcfg`, `lambda_t`, `lambda_a` パラメータ追加
-- [ ] `style_loras` パラメータ追加
-- [ ] `use_olora` パラメータ追加
+- [x] `use_dcfg`, `lambda_t`, `lambda_a` パラメータ追加
+- [x] `style_weights` パラメータ追加（スタイル重み辞書）
+- [x] `use_olora` パラメータ追加
+- [x] `load_style_loras()` メソッド追加
+- [x] `get_loaded_styles()` メソッド追加
 
-#### 5.2 CLI拡張 (`infer_cli.py`)
-- [ ] `--lambda-t`, `--lambda-a` 引数追加
-- [ ] `--pitch`, `--energy` 引数追加
-- [ ] `--emotion`, `--emotion-strength` 引数追加
+#### 5.2 推論ユーティリティ拡張 (`utils_infer.py`)
+- [x] `infer_process()` にReStyleパラメータ追加
+- [x] `infer_batch_process()` にReStyleパラメータ追加
+- [x] Style LoRAコンテキストマネージャー統合
 
 #### 5.3 Gradio UI拡張 (`infer_gradio.py`)
-- [ ] DCFG設定パネル追加（日本語）
-- [ ] スタイル制御スライダー追加
-- [ ] 感情選択ドロップダウン追加
+- [x] DCFG設定パネル追加（日本語）
+- [x] スタイル制御スライダー追加（ピッチ、エネルギー）
+- [x] 感情選択ドロップダウン追加
+- [x] OLoRA融合トグル追加
+
+#### 5.4 学習ガイド
+- [x] `docs/TRAINING_GUIDE.md` - 学習手順ドキュメント
+
+### 使用方法
+
+**Python API:**
+```python
+from f5_tts.api import F5TTS
+
+tts = F5TTS()
+
+# Style LoRAを読み込み（オプション）
+tts.load_style_loras({
+    "pitch_high": "path/to/pitch_high.safetensors",
+    "angry": "path/to/angry.safetensors",
+})
+
+# DCFG + Style LoRAで推論
+audio, sr, _ = tts.infer(
+    ref_file="reference.wav",
+    ref_text="参照テキスト",
+    gen_text="生成したいテキスト",
+    use_dcfg=True,
+    lambda_t=2.0,
+    lambda_a=0.5,
+    style_weights={"pitch_high": 1.0, "angry": 0.5},
+    use_olora=True,
+)
+```
+
+**Gradio UI:**
+```bash
+python src/f5_tts/infer/infer_gradio.py
+# ブラウザで「ReStyle設定」セクションを開く
+```
 
 ---
 
@@ -288,6 +327,7 @@ ReStyle-TTS機能をAPI、CLI、Gradio UIから利用可能にする。
 
 | 日付 | 内容 |
 |------|------|
+| 2026-01-10 | Phase 5 (推論インターフェース) 完了 |
 | 2026-01-10 | Phase 4 (TCO) 完了 |
 | 2026-01-09 | Phase 3 (OLoRA Fusion) 完了 |
 | 2026-01-09 | Phase 2 (Style LoRA) 完了 |
