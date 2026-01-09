@@ -21,38 +21,18 @@ Style LoRA は、ベースの F5-TTS モデルに対して低ランク適応（L
 
 ### 学習可能なスタイル属性
 
-| カテゴリ | 属性 | 説明 |
-|---------|------|------|
-| **ピッチ** | `pitch_high` | 高いピッチの音声 |
-| | `pitch_low` | 低いピッチの音声 |
-| **エネルギー** | `energy_high` | 大きな声・強いエネルギー |
-| | `energy_low` | 小さな声・弱いエネルギー |
-| **感情** | `angry` | 怒り |
-| | `happy` | 喜び |
-| | `sad` | 悲しみ |
-| | `fear` | 恐怖 |
-| | `disgusted` | 嫌悪 |
-| | `surprised` | 驚き |
-
-### 学習の流れ
-
-```
-1. データセット準備
-   ├── 音声ファイル収集
-   ├── スタイルラベリング
-   └── Arrow形式への変換
-
-2. ベースモデル取得
-   └── F5TTS_v1_Base をダウンロード
-
-3. Style LoRA 学習
-   ├── ベースモデル凍結
-   ├── LoRA層のみ学習
-   └── チェックポイント保存
-
-4. 推論での使用
-   └── LoRAを読み込んでスタイル制御
-```
+| カテゴリ | 属性 | 説明 | データソース |
+|---------|------|------|-------------|
+| **ピッチ** | `pitch_high` | 高いピッチの音声 | LibriTTS + VCTK |
+| | `pitch_low` | 低いピッチの音声 | LibriTTS + VCTK |
+| **エネルギー** | `energy_high` | 大きな声・強いエネルギー | LibriTTS + VCTK |
+| | `energy_low` | 小さな声・弱いエネルギー | LibriTTS + VCTK |
+| **感情** | `angry` | 怒り | TESS |
+| | `happy` | 喜び | TESS |
+| | `sad` | 悲しみ | TESS |
+| | `fear` | 恐怖 | TESS |
+| | `disgusted` | 嫌悪 | TESS |
+| | `surprised` | 驚き | TESS |
 
 ---
 
@@ -64,7 +44,7 @@ Style LoRA は、ベースの F5-TTS モデルに対して低ランク適応（L
 |------|------|------|
 | GPU VRAM | 8GB | 16GB以上 |
 | RAM | 16GB | 32GB以上 |
-| ストレージ | 50GB | 100GB以上 |
+| ストレージ | 100GB | 200GB以上 |
 
 ### ソフトウェア要件
 
@@ -78,6 +58,9 @@ nvcc --version
 # 依存関係インストール
 uv sync
 
+# 追加依存関係（ラベリング用）
+uv add praat-parselmouth librosa
+
 # WandB ログイン（必須）
 wandb login
 ```
@@ -87,19 +70,10 @@ wandb login
 ### ベースモデルのダウンロード
 
 ```bash
-# HuggingFace CLI でダウンロード
+mkdir -p checkpoints
 huggingface-cli download SWivid/F5-TTS \
     F5TTS_v1_Base/model_1200000.safetensors \
     --local-dir checkpoints/
-
-# または Python から
-from huggingface_hub import hf_hub_download
-
-hf_hub_download(
-    repo_id="SWivid/F5-TTS",
-    filename="F5TTS_v1_Base/model_1200000.safetensors",
-    local_dir="checkpoints/"
-)
 ```
 
 ---
@@ -109,7 +83,6 @@ hf_hub_download(
 ### 3.1 論文再現用データセット（必須）
 
 ReStyle-TTS論文（arXiv:2601.03632）を再現するには、以下の **英語データセット** を使用します。
-論文では「VccmDataset」という統合データセットを構築しています。
 
 | データセット | サイズ | 用途 | ダウンロード |
 |-------------|--------|------|-------------|
@@ -119,206 +92,162 @@ ReStyle-TTS論文（arXiv:2601.03632）を再現するには、以下の **英�
 
 **重要**: 論文では **英語のみ** で学習・評価されています。
 
-### 3.2 TESSデータセットの構造
-
-TESSには以下の7つの感情カテゴリが含まれます：
-
-| 感情 | スタイル属性名 | ファイル数 |
-|------|--------------|-----------|
-| Angry | `angry` | 400 |
-| Disgust | `disgusted` | 400 |
-| Fear | `fear` | 400 |
-| Happy | `happy` | 400 |
-| Sad | `sad` | 400 |
-| Pleasant Surprise | `surprised` | 400 |
-| Neutral | `neutral` | 400 |
-
-TESSのディレクトリ構造：
-```
-TESS/
-├── OAF_angry/
-├── OAF_disgust/
-├── OAF_fear/
-├── OAF_happy/
-├── OAF_neutral/
-├── OAF_pleasant_surprised/
-├── OAF_sad/
-├── YAF_angry/
-├── YAF_disgust/
-...
-```
-
-### 3.3 代替データセット（実験用）
-
-論文再現以外の実験や、他言語で試す場合：
-
-#### 英語（代替）
-
-| データセット | サイズ | 用途 | ダウンロード |
-|-------------|--------|------|-------------|
-| ESD | 29時間 | 感情 | [GitHub](https://github.com/HLTSingapore/Emotional-Speech-Data) |
-| RAVDESS | 7GB | 感情 | [Zenodo](https://zenodo.org/record/1188976) |
-
-#### 日本語（実験用）
-
-| データセット | サイズ | 用途 | ダウンロード |
-|-------------|--------|------|-------------|
-| JVS Corpus | 30時間 | 全般 | [公式サイト](https://sites.google.com/site/shinaborulab/research-topics/jvs_corpus) |
-| JSUT | 10時間 | 全般 | [公式サイト](https://sites.google.com/site/shinaborulab/research-topics/jsut) |
-
-### 3.4 データセット構造（共通）
-
-学習データセットは以下の構造で準備します：
-
-```
-datasets/
-├── pitch_high/
-│   ├── wavs/
-│   │   ├── audio_001.wav
-│   │   ├── audio_002.wav
-│   │   └── ...
-│   └── metadata.csv
-├── pitch_low/
-│   └── ...
-├── angry/
-│   └── ...
-└── happy/
-    └── ...
-```
-
-#### metadata.csv の形式
-
-```csv
-audio_file|text
-audio_001.wav|これはサンプルテキストです。
-audio_002.wav|音声合成のテストです。
-```
-
-**注意**:
-- 音声ファイルは 24kHz、モノラル推奨
-- テキストはひらがな/漢字混じりまたはピンイン
-
-### 3.5 自動ラベリング（ピッチ/エネルギー）
-
-ピッチとエネルギーは音声から自動的にラベリングできます。
-
-```python
-# scripts/label_pitch_energy.py
-
-import parselmouth
-import librosa
-import numpy as np
-from pathlib import Path
-import json
-
-def compute_pitch_stats(audio_path):
-    """音声ファイルのピッチ統計を計算"""
-    snd = parselmouth.Sound(str(audio_path))
-    pitch = snd.to_pitch()
-    pitch_values = pitch.selected_array['frequency']
-    pitch_values = pitch_values[pitch_values > 0]  # 無声区間を除外
-
-    if len(pitch_values) == 0:
-        return None
-
-    return {
-        'mean': float(np.mean(pitch_values)),
-        'std': float(np.std(pitch_values)),
-        'max': float(np.max(pitch_values)),
-        'min': float(np.min(pitch_values)),
-    }
-
-def compute_energy(audio_path):
-    """音声ファイルのRMSエネルギーを計算"""
-    y, sr = librosa.load(str(audio_path), sr=24000)
-    rms = np.sqrt(np.mean(y**2))
-    return float(rms)
-
-def label_dataset(input_dir, output_dir):
-    """データセットをラベリング"""
-    input_path = Path(input_dir)
-    output_path = Path(output_dir)
-
-    # 全ファイルの統計を収集
-    stats = []
-    for wav_file in input_path.glob("wavs/*.wav"):
-        pitch = compute_pitch_stats(wav_file)
-        energy = compute_energy(wav_file)
-        if pitch:
-            stats.append({
-                'file': wav_file.name,
-                'pitch_mean': pitch['mean'],
-                'energy': energy,
-            })
-
-    # 上位/下位20%でラベリング
-    pitch_values = [s['pitch_mean'] for s in stats]
-    energy_values = [s['energy'] for s in stats]
-
-    pitch_high_threshold = np.percentile(pitch_values, 80)
-    pitch_low_threshold = np.percentile(pitch_values, 20)
-    energy_high_threshold = np.percentile(energy_values, 80)
-    energy_low_threshold = np.percentile(energy_values, 20)
-
-    # 結果を保存
-    labels = {
-        'pitch_high': [s['file'] for s in stats if s['pitch_mean'] >= pitch_high_threshold],
-        'pitch_low': [s['file'] for s in stats if s['pitch_mean'] <= pitch_low_threshold],
-        'energy_high': [s['file'] for s in stats if s['energy'] >= energy_high_threshold],
-        'energy_low': [s['file'] for s in stats if s['energy'] <= energy_low_threshold],
-    }
-
-    output_path.mkdir(parents=True, exist_ok=True)
-    with open(output_path / 'labels.json', 'w') as f:
-        json.dump(labels, f, indent=2)
-
-    print(f"Labeled {len(stats)} files")
-    for label, files in labels.items():
-        print(f"  {label}: {len(files)} files")
-
-if __name__ == "__main__":
-    import sys
-    if len(sys.argv) != 3:
-        print("Usage: uv run python label_pitch_energy.py <input_dir> <output_dir>")
-        sys.exit(1)
-    label_dataset(sys.argv[1], sys.argv[2])
-```
-
-### 3.6 Arrow形式への変換
-
-F5-TTS の学習にはArrow形式のデータセットが必要です。
+### 3.2 データセットのダウンロード
 
 ```bash
-# CSV + WAV → Arrow形式
-uv run python -m f5_tts.train.datasets.prepare_csv_wavs \
-    datasets/pitch_high \
-    datasets/pitch_high_prepared \
-    --workers 16
+mkdir -p raw_datasets
+cd raw_datasets
+
+# ========================================
+# LibriTTS (約60GB)
+# ========================================
+wget https://www.openslr.org/resources/60/train-clean-100.tar.gz
+wget https://www.openslr.org/resources/60/train-clean-360.tar.gz
+wget https://www.openslr.org/resources/60/train-other-500.tar.gz
+tar -xzf train-clean-100.tar.gz
+tar -xzf train-clean-360.tar.gz
+tar -xzf train-other-500.tar.gz
+
+# ========================================
+# VCTK (約11GB)
+# ========================================
+wget https://datashare.ed.ac.uk/download/DS_10283_2950.zip
+unzip DS_10283_2950.zip
+
+# ========================================
+# TESS (約200MB)
+# ========================================
+# Kaggle APIを使用する場合:
+kaggle datasets download -d ejlok1/toronto-emotional-speech-set-tess
+unzip toronto-emotional-speech-set-tess.zip -d TESS
+
+# または手動でKaggleからダウンロード:
+# https://www.kaggle.com/datasets/ejlok1/toronto-emotional-speech-set-tess
+
+cd ..
 ```
 
-出力構造：
+### 3.3 データセットの前処理
+
+```bash
+# ========================================
+# LibriTTS → Arrow形式
+# ========================================
+uv run python -m f5_tts.train.datasets.prepare_libritts
+
+# 出力: data/LibriTTS_100_360_500_char/
+
+# ========================================
+# VCTK → Arrow形式
+# ========================================
+uv run python -m f5_tts.train.datasets.prepare_vctk \
+    --dataset-dir raw_datasets/VCTK-Corpus-0.92
+
+# 出力: data/VCTK_char/
+
+# ========================================
+# TESS → 感情別Arrow形式
+# ========================================
+uv run python -m f5_tts.train.datasets.prepare_tess \
+    --dataset-dir raw_datasets/TESS
+
+# 出力:
+#   data/TESS_angry_char/
+#   data/TESS_happy_char/
+#   data/TESS_sad_char/
+#   data/TESS_fear_char/
+#   data/TESS_disgusted_char/
+#   data/TESS_surprised_char/
+#   data/TESS_neutral_char/
 ```
-datasets/pitch_high_prepared/
-├── raw.arrow      # HuggingFace Arrow形式
-├── duration.json  # 各サンプルの長さ
-└── vocab.txt      # 語彙ファイル
+
+### 3.4 ピッチ/エネルギーラベリング
+
+```bash
+# LibriTTS + VCTKを統合してピッチ/エネルギーでラベリング
+uv run python scripts/label_prosody.py \
+    --input-dirs data/LibriTTS_100_360_500_char data/VCTK_char \
+    --output-dir data \
+    --percentile 20
+
+# 出力:
+#   data/pitch_high_char/
+#   data/pitch_low_char/
+#   data/energy_high_char/
+#   data/energy_low_char/
+```
+
+### 3.5 データセット構造の確認
+
+前処理後、以下のディレクトリ構造になっているか確認してください：
+
+```
+data/
+├── pitch_high_char/
+│   ├── raw.arrow
+│   ├── duration.json
+│   └── vocab.txt
+├── pitch_low_char/
+├── energy_high_char/
+├── energy_low_char/
+├── TESS_angry_char/
+├── TESS_happy_char/
+├── TESS_sad_char/
+├── TESS_fear_char/
+├── TESS_disgusted_char/
+└── TESS_surprised_char/
 ```
 
 ---
 
 ## 4. 学習の実行
 
-### 4.1 基本コマンド
+### 4.1 accelerate設定（マルチGPU用）
+
+```bash
+accelerate config
+```
+
+設定例（T4 x 3）：
+- Distributed training: multi-GPU
+- Number of GPUs: 3
+- Mixed precision: bf16 または fp16
+
+### 4.2 シングルGPU学習
 
 ```bash
 uv run python -m f5_tts.train.train_style_lora \
     --config-name ReStyleTTS_Base \
     style_attribute=pitch_high \
     pretrained_checkpoint=checkpoints/F5TTS_v1_Base/model_1200000.safetensors \
-    datasets.name=pitch_high_prepared
+    datasets.name=pitch_high_char
 ```
 
-### 4.2 主要パラメータ
+### 4.3 マルチGPU学習（T4 x 3）
+
+```bash
+accelerate launch --multi_gpu --num_processes 3 \
+    -m f5_tts.train.train_style_lora \
+    --config-name ReStyleTTS_Base \
+    style_attribute=pitch_high \
+    pretrained_checkpoint=checkpoints/F5TTS_v1_Base/model_1200000.safetensors \
+    datasets.name=pitch_high_char
+```
+
+### 4.4 全スタイル一括学習
+
+```bash
+# 全スタイル（韻律 + 感情）を順番に学習
+bash scripts/train_all_styles.sh
+
+# 韻律属性のみ
+bash scripts/train_all_styles.sh prosody
+
+# 感情属性のみ
+bash scripts/train_all_styles.sh emotion
+```
+
+### 4.5 主要パラメータ
 
 | パラメータ | デフォルト | 説明 |
 |-----------|-----------|------|
@@ -329,108 +258,37 @@ uv run python -m f5_tts.train.train_style_lora \
 | `optim.lora_learning_rate` | 1e-5 | 学習率 |
 | `lora.rank` | 32 | LoRAランク |
 | `lora.alpha` | 64 | LoRAスケーリング係数 |
+| `datasets.batch_size_per_gpu` | 38400 | GPU当たりのバッチサイズ |
 
-### 4.3 カスタム設定例
+### 4.6 T4 GPU向け調整
 
-```bash
-# 高速学習（小さいLoRAランク）
-uv run python -m f5_tts.train.train_style_lora \
-    --config-name ReStyleTTS_Base \
-    style_attribute=angry \
-    pretrained_checkpoint=checkpoints/model_1200000.safetensors \
-    datasets.name=angry_prepared \
-    lora.rank=16 \
-    optim.epochs=5 \
-    optim.lora_learning_rate=2e-5
-
-# 高品質学習（大きいLoRAランク）
-uv run python -m f5_tts.train.train_style_lora \
-    --config-name ReStyleTTS_Base \
-    style_attribute=happy \
-    pretrained_checkpoint=checkpoints/model_1200000.safetensors \
-    datasets.name=happy_prepared \
-    lora.rank=64 \
-    optim.epochs=20 \
-    optim.lora_learning_rate=5e-6
-```
-
-### 4.4 マルチGPU学習
+T4 GPU（16GB VRAM）の場合、メモリ不足を防ぐため：
 
 ```bash
-# Accelerateを使用
-accelerate launch --multi_gpu --num_processes 2 \
+accelerate launch --multi_gpu --num_processes 3 \
     -m f5_tts.train.train_style_lora \
     --config-name ReStyleTTS_Base \
     style_attribute=pitch_high \
-    pretrained_checkpoint=checkpoints/model_1200000.safetensors
+    pretrained_checkpoint=checkpoints/F5TTS_v1_Base/model_1200000.safetensors \
+    datasets.name=pitch_high_char \
+    datasets.batch_size_per_gpu=19200
 ```
 
-### 4.5 全スタイル一括学習スクリプト
-
-```bash
-#!/bin/bash
-# scripts/train_all_styles.sh
-
-STYLES=(
-    "pitch_high"
-    "pitch_low"
-    "energy_high"
-    "energy_low"
-    "angry"
-    "happy"
-    "sad"
-)
-
-CHECKPOINT="checkpoints/F5TTS_v1_Base/model_1200000.safetensors"
-
-for style in "${STYLES[@]}"; do
-    echo "Training $style..."
-    uv run python -m f5_tts.train.train_style_lora \
-        --config-name ReStyleTTS_Base \
-        style_attribute=$style \
-        pretrained_checkpoint=$CHECKPOINT \
-        datasets.name=${style}_prepared
-
-    echo "$style completed!"
-done
-```
-
-### 4.6 チェックポイント
+### 4.7 チェックポイント
 
 学習済みモデルは以下に保存されます：
 
 ```
-ckpts/ReStyleTTS_Base/
+ckpts/ReStyleTTS_Base_vocos_pinyin_pitch_high_char/
 ├── lora_pitch_high_10000.safetensors
 ├── lora_pitch_high_20000.safetensors
 ├── lora_pitch_high_last.safetensors
 └── ...
 ```
 
-### 4.7 論文再現設定
+### 4.8 論文再現設定
 
 ReStyle-TTS論文では、各スタイル属性につき **250時間** の学習を実施しています。
-これはエポック数ではなく、総学習時間で管理されています。
-
-```bash
-# 論文再現用（250時間学習）
-uv run python -m f5_tts.train.train_style_lora \
-    --config-name ReStyleTTS_Base \
-    style_attribute=pitch_high \
-    pretrained_checkpoint=checkpoints/F5TTS_v1_Base/model_1200000.safetensors \
-    datasets.name=pitch_high_prepared \
-    optim.max_hours=250
-```
-
-**論文の学習設定:**
-
-| パラメータ | 値 |
-|-----------|-----|
-| 学習時間 | 250時間/スタイル属性 |
-| LoRAランク | 32 |
-| LoRAアルファ | 64 |
-| サンプリングレート | 24kHz |
-| 言語 | 英語のみ |
 
 ---
 
@@ -447,12 +305,12 @@ tts = F5TTS()
 
 # Style LoRA読み込み
 manager = StyleLoRAManager(tts.ema_model.transformer)
-manager.load_lora("pitch_high", "ckpts/ReStyleTTS_Base/lora_pitch_high_last.safetensors")
-manager.load_lora("angry", "ckpts/ReStyleTTS_Base/lora_angry_last.safetensors")
+manager.load_lora("pitch_high", "ckpts/ReStyleTTS_Base_vocos_pinyin_pitch_high_char/lora_pitch_high_last.safetensors")
+manager.load_lora("angry", "ckpts/ReStyleTTS_Base_vocos_pinyin_TESS_angry_char/lora_angry_last.safetensors")
 
 # スタイル適用して推論
 with manager.apply_styles({"pitch_high": 1.0, "angry": 0.5}, use_olora=True):
-    audio, sr = tts.infer(
+    audio, sr, _ = tts.infer(
         ref_file="reference.wav",
         ref_text="参照テキスト",
         gen_text="生成したいテキスト",
@@ -464,19 +322,17 @@ with manager.apply_styles({"pitch_high": 1.0, "angry": 0.5}, use_olora=True):
 
 ### 5.2 Gradio UI
 
-Gradio UIを起動すると、ReStyle設定セクションでスタイルを制御できます：
-
 ```bash
 uv run python src/f5_tts/infer/infer_gradio.py
 ```
+
+ブラウザで「ReStyle設定」セクションを展開して、スタイルを制御できます。
 
 ---
 
 ## 6. トラブルシューティング
 
-### よくある問題
-
-#### CUDA out of memory
+### CUDA out of memory
 
 ```
 解決策:
@@ -488,16 +344,16 @@ uv run python src/f5_tts/infer/infer_gradio.py
    lora.rank=16
 ```
 
-#### データセットが見つからない
+### データセットが見つからない
 
 ```
 解決策:
 1. datasets.name が正しいか確認
-2. Arrow形式への変換が完了しているか確認
-3. vocab.txt が存在するか確認
+2. data/ディレクトリにArrow形式のデータセットがあるか確認
+3. vocab.txt, duration.json, raw.arrow が存在するか確認
 ```
 
-#### 学習が収束しない
+### 学習が収束しない
 
 ```
 解決策:
@@ -515,7 +371,82 @@ uv run python src/f5_tts/infer/infer_gradio.py
 # 学習開始後、https://wandb.ai/ でログを確認できます
 
 # TensorBoard（オプション）
-tensorboard --logdir ckpts/ReStyleTTS_Base/
+tensorboard --logdir ckpts/ReStyleTTS_Base_*/
+```
+
+---
+
+## クイックスタート（全コマンド）
+
+以下のコマンドを順番に実行すると、環境構築から学習開始まで完了します。
+
+```bash
+# ========================================
+# Step 0: リポジトリクローン & 環境構築
+# ========================================
+git clone https://github.com/ayutaz/F5-TTS.git
+cd F5-TTS
+git checkout feature/restyle-dcfg
+uv sync
+uv add praat-parselmouth librosa
+wandb login
+
+# ========================================
+# Step 1: ベースモデルダウンロード
+# ========================================
+mkdir -p checkpoints
+huggingface-cli download SWivid/F5-TTS \
+    F5TTS_v1_Base/model_1200000.safetensors \
+    --local-dir checkpoints/
+
+# ========================================
+# Step 2: データセットダウンロード
+# ========================================
+mkdir -p raw_datasets && cd raw_datasets
+
+# LibriTTS
+wget https://www.openslr.org/resources/60/train-clean-100.tar.gz
+wget https://www.openslr.org/resources/60/train-clean-360.tar.gz
+wget https://www.openslr.org/resources/60/train-other-500.tar.gz
+tar -xzf train-clean-100.tar.gz
+tar -xzf train-clean-360.tar.gz
+tar -xzf train-other-500.tar.gz
+
+# VCTK
+wget https://datashare.ed.ac.uk/download/DS_10283_2950.zip
+unzip DS_10283_2950.zip
+
+# TESS (Kaggleから手動ダウンロード)
+# https://www.kaggle.com/datasets/ejlok1/toronto-emotional-speech-set-tess
+unzip toronto-emotional-speech-set-tess.zip -d TESS
+
+cd ..
+
+# ========================================
+# Step 3: データセット前処理
+# ========================================
+uv run python -m f5_tts.train.datasets.prepare_libritts
+uv run python -m f5_tts.train.datasets.prepare_vctk --dataset-dir raw_datasets/VCTK-Corpus-0.92
+uv run python -m f5_tts.train.datasets.prepare_tess --dataset-dir raw_datasets/TESS
+
+# ========================================
+# Step 4: ピッチ/エネルギーラベリング
+# ========================================
+uv run python scripts/label_prosody.py \
+    --input-dirs data/LibriTTS_100_360_500_char data/VCTK_char \
+    --output-dir data \
+    --percentile 20
+
+# ========================================
+# Step 5: accelerate設定
+# ========================================
+accelerate config
+# → multi-GPU, 3 GPUs, bf16/fp16
+
+# ========================================
+# Step 6: 学習開始
+# ========================================
+bash scripts/train_all_styles.sh
 ```
 
 ---
@@ -526,3 +457,6 @@ tensorboard --logdir ckpts/ReStyleTTS_Base/
 - [ReStyle-TTS 論文](https://arxiv.org/abs/2601.03632)
 - [LoRA 論文](https://arxiv.org/abs/2106.09685)
 - [PEFT ライブラリ](https://github.com/huggingface/peft)
+- [LibriTTS データセット](https://openslr.org/60/)
+- [VCTK データセット](https://datashare.ed.ac.uk/handle/10283/2950)
+- [TESS データセット](https://www.kaggle.com/datasets/ejlok1/toronto-emotional-speech-set-tess)

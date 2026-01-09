@@ -16,7 +16,10 @@
       "Bash(uv run pytest:*)",
       "Bash(cat:*)",
       "Bash(uv add:*)",
-      "Bash(git restore:*)"
+      "Bash(git restore:*)",
+      "Bash(git push:*)",
+      "WebSearch",
+      "WebFetch(domain:arxiv.org)"
     ]
   }
 }
