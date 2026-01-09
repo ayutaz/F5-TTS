@@ -19,7 +19,7 @@ ReStyle-TTSは、ゼロショット音声合成における連続的かつ相対
 |-------|------|------|---------|
 | 1 | DCFG | ✅ 完了 | `feature/restyle-dcfg` |
 | 2 | Style LoRA | ✅ 完了 | `feature/restyle-dcfg` |
-| 3 | OLoRA Fusion | 📋 未着手 | - |
+| 3 | OLoRA Fusion | ✅ 完了 | `feature/restyle-dcfg` |
 | 4 | TCO | 📋 未着手 | - |
 | 5 | 推論インターフェース | 📋 未着手 | - |
 
@@ -117,15 +117,15 @@ lora:
 
 ---
 
-## Phase 3: OLoRA Fusion 📋
+## Phase 3: OLoRA Fusion ✅
 
 ### 目的
 複数のStyle LoRAを干渉なく同時適用するための直交融合メカニズム。
 
-### タスク
-- [ ] `src/f5_tts/restyle/olora_fusion.py` - 直交射影実装
-- [ ] StyleLoRAManagerへの統合
-- [ ] 複数属性同時制御テスト
+### 実装内容
+- [x] `src/f5_tts/restyle/olora_fusion.py` - 直交射影実装
+- [x] StyleLoRAManagerへの統合（`use_olora`パラメータ）
+- [x] `tests/test_olora_fusion.py` - テスト（30テストパス）
 
 ### 数式
 ```
@@ -134,14 +134,39 @@ P_{-i} = V_{-i}^T @ pinv(V_{-i}^T)
 ΔW_fuse = Σ α_i * ΔŴ_i
 ```
 
-### 使用例
+### 使用方法
 ```python
-# ピッチを上げながら、エネルギーを下げ、怒りの感情を加える
-style_loras = {
-    "pitch_high": 1.0,
-    "energy_low": 0.5,
-    "angry": 2.0,
-}
+from f5_tts.restyle import StyleLoRAManager, OLoRAConfig
+
+# マネージャー初期化（OLoRA設定付き）
+manager = StyleLoRAManager(model.transformer, olora_config=OLoRAConfig())
+
+# LoRAを読み込み
+manager.load_lora("pitch_high", "path/to/pitch_high.safetensors")
+manager.load_lora("angry", "path/to/angry.safetensors")
+
+# OLoRA有効で複数スタイルを適用
+with manager.apply_styles({"pitch_high": 1.0, "angry": 0.5}, use_olora=True):
+    output = model.sample(...)
+
+# OLoRA無効（通常の重み付き合成）
+with manager.apply_styles({"pitch_high": 1.0}, use_olora=False):
+    output = model.sample(...)
+```
+
+### OLoRAFusion クラス（低レベルAPI）
+```python
+from f5_tts.restyle import OLoRAFusion
+
+fusion = OLoRAFusion()
+fusion.add_lora("pitch_high", pitch_high_state_dict)
+fusion.add_lora("angry", angry_state_dict)
+
+# 干渉度を計算
+interference = fusion.compute_interference("pitch_high", "angry")
+
+# 融合
+fused = fusion.fuse({"pitch_high": 1.0, "angry": 0.5})
 ```
 
 ---
@@ -235,6 +260,7 @@ ReStyle-TTS機能をAPI、CLI、Gradio UIから利用可能にする。
 
 | 日付 | 内容 |
 |------|------|
+| 2026-01-09 | Phase 3 (OLoRA Fusion) 完了 |
 | 2026-01-09 | Phase 2 (Style LoRA) 完了 |
 | 2026-01-09 | Phase 1 (DCFG) 完了 |
 | 2026-01-09 | ロードマップ作成 |

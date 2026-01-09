@@ -4,7 +4,7 @@
 
 F5-TTSをベースにReStyle-TTSの機能を追加実装する。
 
-**現在の進捗**: Phase 1 (DCFG) ✅ 完了 / Phase 2 (Style LoRA) ✅ 完了
+**現在の進捗**: Phase 1 (DCFG) ✅ 完了 / Phase 2 (Style LoRA) ✅ 完了 / Phase 3 (OLoRA Fusion) ✅ 完了
 
 ## ディレクトリ構造
 
@@ -20,8 +20,8 @@ F5-TTS/
 │   ├── restyle/                # ✅ 新規作成
 │   │   ├── __init__.py         # ✅ 作成済
 │   │   ├── dcfg.py             # ✅ 作成済: DCFG実装
-│   │   ├── style_lora.py       # ✅ 作成済: Style LoRA管理
-│   │   ├── olora_fusion.py     # 📋 Phase 3で作成予定
+│   │   ├── style_lora.py       # ✅ 作成済: Style LoRA管理 + OLoRA統合
+│   │   ├── olora_fusion.py     # ✅ 作成済: OLoRA直交融合
 │   │   ├── tco.py              # 📋 Phase 4で作成予定
 │   │   └── speaker_encoder.py  # 📋 Phase 4で作成予定
 │   │
@@ -33,7 +33,8 @@ F5-TTS/
 │
 ├── tests/
 │   ├── test_dcfg.py            # ✅ 作成済 (14テスト)
-│   └── test_style_lora.py      # ✅ 作成済 (21テスト)
+│   ├── test_style_lora.py      # ✅ 作成済 (21テスト)
+│   └── test_olora_fusion.py    # ✅ 作成済 (30テスト)
 │
 ├── docs/
 │   ├── ROADMAP.md              # ✅ 作成済
@@ -163,18 +164,39 @@ with manager.apply_styles({"pitch_high": 1.0}):
 
 ---
 
-## Phase 3: OLoRA Fusion 📋 未実装
+## Phase 3: OLoRA Fusion ✅ 完了
 
 ### 3.1 目的
 複数のStyle LoRAを干渉なく同時適用するための直交融合メカニズム。
 
-### 3.2 計画ファイル
+### 3.2 実装済みファイル
 
-#### `src/f5_tts/restyle/olora_fusion.py`
+#### `src/f5_tts/restyle/olora_fusion.py` ✅
 ```python
+from dataclasses import dataclass
+
+@dataclass
+class OLoRAConfig:
+    orthogonalize: bool = True
+    epsilon: float = 1e-8
+    use_svd: bool = False
+
 class OLoRAFusion:
-    def compute_orthogonal_projection(self, lora_names): ...
-    def fuse(self, lora_alphas, orthogonalize=True): ...
+    def add_lora(self, name, state_dict): ...
+    def fuse(self, alphas, orthogonalize=None): ...
+    def compute_interference(self, lora1_name, lora2_name): ...
+    def get_interference_matrix(self): ...
+
+def fuse_lora_weights(lora_state_dicts, alphas, orthogonalize=True): ...
+def orthogonalize_loras(lora_deltas): ...
+def compute_orthogonal_projection(vectors, target_idx): ...
+```
+
+#### `src/f5_tts/restyle/style_lora.py` ✅ OLoRA統合
+```python
+class StyleLoRAManager:
+    def __init__(self, base_model, config=None, olora_config=None): ...
+    def apply_styles(self, style_weights, use_olora=True): ...
 ```
 
 ### 3.3 数式
@@ -182,6 +204,36 @@ class OLoRAFusion:
 v̂_i = (I - P_{-i}) @ v_i
 P_{-i} = V_{-i}^T @ pinv(V_{-i}^T)
 ΔW_fuse = Σ α_i * ΔŴ_i
+```
+
+### 3.4 使用方法
+
+**StyleLoRAManager（高レベルAPI）:**
+```python
+from f5_tts.restyle import StyleLoRAManager, OLoRAConfig
+
+manager = StyleLoRAManager(model.transformer, olora_config=OLoRAConfig())
+manager.load_lora("pitch_high", "path/to/pitch_high.safetensors")
+manager.load_lora("angry", "path/to/angry.safetensors")
+
+# OLoRA有効（デフォルト）
+with manager.apply_styles({"pitch_high": 1.0, "angry": 0.5}):
+    output = model.sample(...)
+```
+
+**OLoRAFusion（低レベルAPI）:**
+```python
+from f5_tts.restyle import OLoRAFusion
+
+fusion = OLoRAFusion()
+fusion.add_lora("pitch_high", pitch_high_state_dict)
+fusion.add_lora("angry", angry_state_dict)
+
+# 干渉度を計算
+interference = fusion.compute_interference("pitch_high", "angry")
+
+# 融合
+fused = fusion.fuse({"pitch_high": 1.0, "angry": 0.5})
 ```
 
 ---
@@ -261,10 +313,10 @@ Phase 2: Style LoRA ✅ 完了
 ├── ✅ configs/ReStyleTTS_Base.yaml 作成
 └── ✅ テスト作成・検証
 
-Phase 3: OLoRA Fusion 📋 未着手
-├── [ ] olora_fusion.py 作成
-├── [ ] StyleLoRAManagerへの統合
-└── [ ] 複数属性同時制御テスト
+Phase 3: OLoRA Fusion ✅ 完了
+├── ✅ olora_fusion.py 作成
+├── ✅ StyleLoRAManagerへの統合
+└── ✅ テスト作成・検証 (30テスト)
 
 Phase 4: TCO 📋 未着手
 ├── [ ] speaker_encoder.py 作成
@@ -287,7 +339,8 @@ Phase 5: 統合 📋 未着手
 |---------------|---------|------|
 | `tests/test_dcfg.py` | 16 (14 passed, 2 skipped) | ✅ |
 | `tests/test_style_lora.py` | 21 (21 passed) | ✅ |
-| **合計** | **37** | ✅ |
+| `tests/test_olora_fusion.py` | 30 (30 passed) | ✅ |
+| **合計** | **67 (65 passed, 2 skipped)** | ✅ |
 
 ---
 
@@ -319,6 +372,7 @@ from f5_tts.restyle import StyleLoRAManager
 
 | 日付 | 内容 |
 |------|------|
+| 2026-01-09 | Phase 3 (OLoRA Fusion) 完了 |
 | 2026-01-09 | Phase 2 (Style LoRA) 完了 |
 | 2026-01-09 | Phase 1 (DCFG) 完了 |
 | 2026-01-09 | 初版作成 |

@@ -2,19 +2,22 @@
 Style LoRA management for ReStyle-TTS
 
 各スタイル属性（ピッチ、エネルギー、感情）に特化したLoRAアダプターを管理する。
+OLoRA Fusion による複数LoRAの直交融合もサポート。
 
-Reference: ReStyle-TTS (arXiv:2601.03632) Section 3.2
+Reference: ReStyle-TTS (arXiv:2601.03632) Section 3.2, 3.3
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 import torch
 import torch.nn as nn
 from peft import LoraConfig, get_peft_model, PeftModel, set_peft_model_state_dict
+
+from f5_tts.restyle.olora_fusion import OLoRAFusion, OLoRAConfig, fuse_lora_weights
 
 if TYPE_CHECKING:
     from f5_tts.model.backbones.dit import DiT
@@ -88,13 +91,14 @@ class StyleLoRAManager:
     """Style LoRAの管理クラス
 
     複数のスタイル属性に対応したLoRAアダプターを管理する。
+    OLoRA Fusion による複数LoRAの直交融合もサポート。
 
     Usage:
         >>> manager = StyleLoRAManager(base_model)
         >>> manager.load_lora("pitch_high", "path/to/pitch_high.safetensors")
         >>> manager.load_lora("angry", "path/to/angry.safetensors")
-        >>> # スタイルを適用して推論
-        >>> with manager.apply_styles({"pitch_high": 1.0, "angry": 0.5}):
+        >>> # スタイルを適用して推論（OLoRA有効）
+        >>> with manager.apply_styles({"pitch_high": 1.0, "angry": 0.5}, use_olora=True):
         ...     output = model.sample(...)
     """
 
@@ -102,14 +106,17 @@ class StyleLoRAManager:
         self,
         base_model: nn.Module,
         config: StyleLoRAConfig | None = None,
+        olora_config: OLoRAConfig | None = None,
     ):
         """
         Args:
             base_model: ベースモデル（DiT）
             config: LoRA設定（Noneの場合はデフォルト設定を使用）
+            olora_config: OLoRA Fusion設定（Noneの場合はデフォルト設定を使用）
         """
         self.base_model = base_model
         self.config = config or StyleLoRAConfig()
+        self.olora_config = olora_config or OLoRAConfig()
         self.loaded_loras: dict[str, dict[str, torch.Tensor]] = {}
         self._original_state: dict[str, torch.Tensor] | None = None
         self._peft_model: PeftModel | None = None
@@ -175,11 +182,13 @@ class StyleLoRAManager:
     def _apply_lora_weights(
         self,
         style_weights: dict[str, float],
+        use_olora: bool = True,
     ) -> None:
         """LoRA重みを適用
 
         Args:
             style_weights: {スタイル名: 強度} の辞書
+            use_olora: OLoRA Fusion を使用するか（デフォルト: True）
         """
         if not style_weights:
             return
@@ -197,15 +206,30 @@ class StyleLoRAManager:
         # PEFTモデルを確保
         peft_model = self._ensure_peft_model()
 
-        # 複数のLoRAを重み付けで合成
-        combined_state = {}
-        for style_name, weight in active_styles.items():
-            lora_state = self.loaded_loras[style_name]
-            for key, value in lora_state.items():
-                if key in combined_state:
-                    combined_state[key] = combined_state[key] + weight * value
-                else:
-                    combined_state[key] = weight * value.clone()
+        # 有効なLoRAの state_dict を収集
+        active_lora_states = {
+            name: self.loaded_loras[name]
+            for name in active_styles.keys()
+        }
+
+        if use_olora and len(active_styles) > 1:
+            # OLoRA Fusion で直交融合
+            combined_state = fuse_lora_weights(
+                active_lora_states,
+                active_styles,
+                orthogonalize=self.olora_config.orthogonalize,
+                epsilon=self.olora_config.epsilon,
+            )
+        else:
+            # 通常の重み付き合成
+            combined_state = {}
+            for style_name, weight in active_styles.items():
+                lora_state = self.loaded_loras[style_name]
+                for key, value in lora_state.items():
+                    if key in combined_state:
+                        combined_state[key] = combined_state[key] + weight * value
+                    else:
+                        combined_state[key] = weight * value.clone()
 
         # 合成した重みを適用
         set_peft_model_state_dict(peft_model, combined_state)
@@ -221,33 +245,49 @@ class StyleLoRAManager:
     class _StyleContext:
         """スタイル適用のコンテキストマネージャー"""
 
-        def __init__(self, manager: "StyleLoRAManager", style_weights: dict[str, float]):
+        def __init__(
+            self,
+            manager: "StyleLoRAManager",
+            style_weights: dict[str, float],
+            use_olora: bool = True,
+        ):
             self.manager = manager
             self.style_weights = style_weights
+            self.use_olora = use_olora
 
         def __enter__(self):
-            self.manager._apply_lora_weights(self.style_weights)
+            self.manager._apply_lora_weights(self.style_weights, use_olora=self.use_olora)
             return self
 
         def __exit__(self, exc_type, exc_val, exc_tb):
             self.manager._restore_original_weights()
             return False
 
-    def apply_styles(self, style_weights: dict[str, float]) -> _StyleContext:
+    def apply_styles(
+        self,
+        style_weights: dict[str, float],
+        use_olora: bool = True,
+    ) -> _StyleContext:
         """スタイルを適用するコンテキストマネージャー
 
         Args:
             style_weights: {スタイル名: 強度} の辞書
                 例: {"pitch_high": 1.0, "angry": 0.5}
+            use_olora: OLoRA Fusion を使用するか（デフォルト: True）
+                複数のLoRAを同時適用する際に直交融合により干渉を減らす
 
         Returns:
             コンテキストマネージャー
 
         Usage:
-            >>> with manager.apply_styles({"pitch_high": 1.0}):
+            >>> # OLoRA有効（デフォルト）
+            >>> with manager.apply_styles({"pitch_high": 1.0, "angry": 0.5}):
+            ...     output = model.sample(...)
+            >>> # OLoRA無効（通常の重み付き合成）
+            >>> with manager.apply_styles({"pitch_high": 1.0}, use_olora=False):
             ...     output = model.sample(...)
         """
-        return self._StyleContext(self, style_weights)
+        return self._StyleContext(self, style_weights, use_olora)
 
     def get_style_info(self, style_name: str) -> dict:
         """スタイル属性の情報を取得

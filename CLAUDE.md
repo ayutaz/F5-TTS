@@ -16,7 +16,7 @@ Based on:
 |-------|---------|--------|
 | 1 | DCFG (Decoupled CFG) | ✅ 完了 |
 | 2 | Style LoRA | ✅ 完了 |
-| 3 | OLoRA Fusion | 📋 未着手 |
+| 3 | OLoRA Fusion | ✅ 完了 |
 | 4 | TCO | 📋 未着手 |
 | 5 | 推論インターフェース | 📋 未着手 |
 
@@ -93,7 +93,7 @@ Output: Generated Audio
 
 1. **DCFG (Decoupled CFG)** ✅: Separate text/reference guidance
 2. **Style LoRA** ✅: Attribute-specific adapters (pitch, energy, emotions)
-3. **OLoRA Fusion** 📋: Orthogonal multi-LoRA composition
+3. **OLoRA Fusion** ✅: Orthogonal multi-LoRA composition
 4. **TCO** 📋: Timbre consistency optimization
 
 ## Key Files
@@ -107,7 +107,8 @@ Output: Generated Audio
 ### ReStyle-TTS Extensions ✅
 - `src/f5_tts/restyle/__init__.py` - ReStyleモジュール
 - `src/f5_tts/restyle/dcfg.py` - DCFG実装 (DCFGConfig, dcfg_combine)
-- `src/f5_tts/restyle/style_lora.py` - Style LoRA管理 (StyleLoRAManager)
+- `src/f5_tts/restyle/style_lora.py` - Style LoRA管理 (StyleLoRAManager + OLoRA統合)
+- `src/f5_tts/restyle/olora_fusion.py` - OLoRA直交融合 (OLoRAFusion, fuse_lora_weights)
 - `src/f5_tts/train/train_style_lora.py` - LoRA訓練スクリプト
 
 ### Inference
@@ -121,6 +122,7 @@ Output: Generated Audio
 ### Tests
 - `tests/test_dcfg.py` - DCFGテスト (16テスト)
 - `tests/test_style_lora.py` - Style LoRAテスト (21テスト)
+- `tests/test_olora_fusion.py` - OLoRA Fusionテスト (30テスト)
 
 ## DCFG Implementation ✅
 
@@ -174,12 +176,34 @@ with manager.apply_styles({"pitch_high": 1.0}):
     output = model.sample(...)
 ```
 
-## OLoRA Fusion (Planned)
+## OLoRA Fusion Implementation ✅
+
+Location: `restyle/olora_fusion.py`, `restyle/style_lora.py`
 
 ```python
-# Orthogonal projection for each LoRA
-v̂_i = (I - P_{-i}) @ v_i  # where P_{-i} = V_{-i} @ pinv(V_{-i})
+# Orthogonal projection formula
+v̂_i = (I - P_{-i}) @ v_i  # where P_{-i} = V_{-i}^T @ pinv(V_{-i}^T)
 ΔW_fuse = Σ α_i * ΔŴ_i   # weighted sum of orthogonalized LoRAs
+
+# Usage with StyleLoRAManager
+from f5_tts.restyle import StyleLoRAManager, OLoRAConfig
+
+manager = StyleLoRAManager(model.transformer, olora_config=OLoRAConfig())
+manager.load_lora("pitch_high", "path/to/pitch_high.safetensors")
+manager.load_lora("angry", "path/to/angry.safetensors")
+
+# Apply multiple styles with OLoRA fusion (default)
+with manager.apply_styles({"pitch_high": 1.0, "angry": 0.5}, use_olora=True):
+    output = model.sample(...)
+
+# Low-level API
+from f5_tts.restyle import OLoRAFusion
+
+fusion = OLoRAFusion()
+fusion.add_lora("pitch_high", pitch_high_state_dict)
+fusion.add_lora("angry", angry_state_dict)
+interference = fusion.compute_interference("pitch_high", "angry")  # 0.0-1.0
+fused = fusion.fuse({"pitch_high": 1.0, "angry": 0.5})
 ```
 
 ## TCO Training (Planned)

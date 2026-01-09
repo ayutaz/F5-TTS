@@ -1,6 +1,6 @@
 # ReStyle-TTS アーキテクチャ詳細
 
-> **実装状況**: Phase 1 (DCFG) ✅ 完了 / Phase 2 (Style LoRA) ✅ 完了
+> **実装状況**: Phase 1 (DCFG) ✅ 完了 / Phase 2 (Style LoRA) ✅ 完了 / Phase 3 (OLoRA Fusion) ✅ 完了
 >
 > 詳細は [IMPLEMENTATION_PLAN.md](./IMPLEMENTATION_PLAN.md) を参照
 
@@ -238,9 +238,11 @@ lora_config = {
 - VccmDataset (LibriTTS + 感情データセット)
 - 訓練時間: 各属性250時間
 
-### 4.3 OLoRA Fusion (Orthogonal LoRA Fusion) 📋 未実装
+### 4.3 OLoRA Fusion (Orthogonal LoRA Fusion) ✅ 実装済み
 
-**計画ファイル**: `src/f5_tts/restyle/olora_fusion.py`
+**実装ファイル**:
+- `src/f5_tts/restyle/olora_fusion.py` - OLoRAFusion, fuse_lora_weights
+- `src/f5_tts/restyle/style_lora.py` - StyleLoRAManagerへの統合 (use_olora)
 
 #### アルゴリズム
 
