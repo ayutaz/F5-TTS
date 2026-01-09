@@ -29,6 +29,7 @@ from f5_tts.model.utils import (
     list_str_to_tensor,
     mask_from_frac_lengths,
 )
+from f5_tts.restyle.dcfg import dcfg_combine
 
 
 class CFM(nn.Module):
@@ -90,6 +91,10 @@ class CFM(nn.Module):
         lens: int["b"] | None = None,
         steps=32,
         cfg_strength=1.0,
+        # DCFG parameters (ReStyle-TTS)
+        use_dcfg: bool = False,
+        lambda_t: float = 2.0,
+        lambda_a: float = 0.5,
         sway_sampling_coef=None,
         seed: int | None = None,
         max_duration=4096,
@@ -163,8 +168,8 @@ class CFM(nn.Module):
             # at each step, conditioning is fixed
             # step_cond = torch.where(cond_mask, cond, torch.zeros_like(cond))
 
-            # predict flow (cond)
-            if cfg_strength < 1e-5:
+            # No guidance case
+            if not use_dcfg and cfg_strength < 1e-5:
                 pred = self.transformer(
                     x=x,
                     cond=step_cond,
@@ -177,7 +182,24 @@ class CFM(nn.Module):
                 )
                 return pred
 
-            # predict flow (cond and uncond), for classifier-free guidance
+            # DCFG (Decoupled Classifier-Free Guidance) - ReStyle-TTS
+            if use_dcfg:
+                # 3-pass inference: full_cond, text_only, uncond
+                pred_dcfg = self.transformer(
+                    x=x,
+                    cond=step_cond,
+                    text=text,
+                    time=t,
+                    mask=mask,
+                    dcfg_infer=True,
+                    cache=True,
+                )
+                # Split predictions: [full_cond, text_only, uncond]
+                f_full, f_text, f_null = torch.chunk(pred_dcfg, 3, dim=0)
+                # DCFG formula: f̂ = f_t + λ_t(f_t - f_∅) + λ_a(f_at - f_t)
+                return dcfg_combine(f_full, f_text, f_null, lambda_t, lambda_a)
+
+            # Standard CFG (classifier-free guidance)
             pred_cfg = self.transformer(
                 x=x,
                 cond=step_cond,

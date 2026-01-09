@@ -285,6 +285,7 @@ class DiT(nn.Module):
         drop_audio_cond: bool = False,  # cfg for cond audio
         drop_text: bool = False,  # cfg for text
         cfg_infer: bool = False,  # cfg inference, pack cond & uncond forward
+        dcfg_infer: bool = False,  # dcfg inference, pack full/text/uncond forward (3 passes)
         cache: bool = False,
     ):
         batch, seq_len = x.shape[0], x.shape[1]
@@ -293,7 +294,23 @@ class DiT(nn.Module):
 
         # t: conditioning time, text: text, x: noised audio + cond audio + text
         t = self.time_embed(time)
-        if cfg_infer:  # pack cond & uncond forward: b n d -> 2b n d
+        if dcfg_infer:  # DCFG: pack full_cond & text_only & uncond forward: b n d -> 3b n d
+            # Full conditional: audio + text
+            x_full = self.get_input_embed(
+                x, cond, text, drop_audio_cond=False, drop_text=False, cache=cache, audio_mask=mask
+            )
+            # Text-only: no audio, with text
+            x_text = self.get_input_embed(
+                x, cond, text, drop_audio_cond=True, drop_text=False, cache=cache, audio_mask=mask
+            )
+            # Unconditional: no audio, no text
+            x_uncond = self.get_input_embed(
+                x, cond, text, drop_audio_cond=True, drop_text=True, cache=cache, audio_mask=mask
+            )
+            x = torch.cat((x_full, x_text, x_uncond), dim=0)
+            t = torch.cat((t, t, t), dim=0)
+            mask = torch.cat((mask, mask, mask), dim=0) if mask is not None else None
+        elif cfg_infer:  # Standard CFG: pack cond & uncond forward: b n d -> 2b n d
             x_cond = self.get_input_embed(
                 x, cond, text, drop_audio_cond=False, drop_text=False, cache=cache, audio_mask=mask
             )
