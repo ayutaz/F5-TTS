@@ -1,0 +1,216 @@
+# ReStyle-TTS 実装ロードマップ
+
+F5-TTSにReStyle-TTS（arXiv:2601.03632）の機能を追加実装するためのロードマップ。
+
+## 概要
+
+ReStyle-TTSは、ゼロショット音声合成における連続的かつ相対的なスタイル制御を実現する手法。以下の4つの主要技術で構成される：
+
+1. **DCFG** - テキストと参照音声のガイダンスを分離
+2. **Style LoRA** - スタイル属性ごとのアダプター
+3. **OLoRA Fusion** - 複数LoRAの直交融合
+4. **TCO** - 音色一貫性の最適化
+
+---
+
+## 実装状況
+
+| Phase | 機能 | 状態 | ブランチ |
+|-------|------|------|---------|
+| 1 | DCFG | ✅ 完了 | `feature/restyle-dcfg` |
+| 2 | Style LoRA | 📋 未着手 | - |
+| 3 | OLoRA Fusion | 📋 未着手 | - |
+| 4 | TCO | 📋 未着手 | - |
+| 5 | 推論インターフェース | 📋 未着手 | - |
+
+---
+
+## Phase 1: DCFG (Decoupled Classifier-Free Guidance) ✅
+
+### 目的
+テキストと参照音声のガイダンスを分離し、参照スタイルへの依存度を制御可能にする。
+
+### 実装内容
+- [x] `src/f5_tts/restyle/dcfg.py` - DCFG設定とユーティリティ
+- [x] `src/f5_tts/model/backbones/dit.py` - 3パス推論（dcfg_infer）
+- [x] `src/f5_tts/model/cfm.py` - sample()にDCFGパラメータ追加
+- [x] `tests/test_dcfg.py` - ユニットテスト（14テストパス）
+
+### 使用方法
+```python
+from f5_tts.model.cfm import CFM
+
+# DCFG有効
+output, _ = model.sample(
+    cond, text, duration,
+    use_dcfg=True,
+    lambda_t=2.0,  # テキストガイダンス強度
+    lambda_a=0.5,  # 参照音声ガイダンス強度
+)
+```
+
+### パラメータ
+| パラメータ | デフォルト | 説明 |
+|-----------|-----------|------|
+| `use_dcfg` | `False` | DCFGを有効にするか |
+| `lambda_t` | `2.0` | テキストガイダンス強度 |
+| `lambda_a` | `0.5` | 参照音声ガイダンス強度（0で影響なし） |
+
+---
+
+## Phase 2: Style LoRA 📋
+
+### 目的
+各スタイル属性（ピッチ、エネルギー、感情）に特化したLoRAアダプターを学習し、連続的なスタイル制御を可能にする。
+
+### タスク
+- [ ] `peft>=0.7.0` 依存関係追加
+- [ ] `src/f5_tts/restyle/style_lora.py` - StyleLoRAManager実装
+- [ ] `src/f5_tts/train/train_style_lora.py` - LoRA訓練スクリプト
+- [ ] `src/f5_tts/configs/ReStyleTTS_Base.yaml` - 設定ファイル
+- [ ] テスト作成
+
+### スタイル属性
+| カテゴリ | 属性 |
+|---------|------|
+| ピッチ | `pitch_high`, `pitch_low` |
+| エネルギー | `energy_high`, `energy_low` |
+| 感情 | `angry`, `happy`, `sad`, `fear`, `disgusted`, `surprised` |
+
+### LoRA設定
+```yaml
+lora:
+  rank: 32
+  alpha: 64
+  target_modules:
+    - to_q
+    - to_k
+    - to_v
+    - to_out.0
+    - ff.ff.0
+    - ff.ff.2
+  dropout: 0.0
+```
+
+---
+
+## Phase 3: OLoRA Fusion 📋
+
+### 目的
+複数のStyle LoRAを干渉なく同時適用するための直交融合メカニズム。
+
+### タスク
+- [ ] `src/f5_tts/restyle/olora_fusion.py` - 直交射影実装
+- [ ] StyleLoRAManagerへの統合
+- [ ] 複数属性同時制御テスト
+
+### 数式
+```
+v̂_i = (I - P_{-i}) @ v_i
+P_{-i} = V_{-i}^T @ pinv(V_{-i}^T)
+ΔW_fuse = Σ α_i * ΔŴ_i
+```
+
+### 使用例
+```python
+# ピッチを上げながら、エネルギーを下げ、怒りの感情を加える
+style_loras = {
+    "pitch_high": 1.0,
+    "energy_low": 0.5,
+    "angry": 2.0,
+}
+```
+
+---
+
+## Phase 4: TCO (Timbre Consistency Optimization) 📋
+
+### 目的
+DCFGで参照依存を減らした際の音色劣化を補償する。
+
+### タスク
+- [ ] `src/f5_tts/restyle/speaker_encoder.py` - WavLM話者エンコーダー
+- [ ] `src/f5_tts/restyle/tco.py` - アドバンテージ重み付き損失
+- [ ] `trainer.py` 修正
+- [ ] TCO訓練テスト
+
+### 数式
+```
+w_t = 1 + λ * tanh(β * A_t)
+L_total = w_t * L_FM
+```
+
+### ハイパーパラメータ
+| パラメータ | 値 | 説明 |
+|-----------|-----|------|
+| λ | 0.2 | 報酬強度 |
+| β | 5.0 | アドバンテージ感度 |
+| μ | 0.9 | EMAモメンタム |
+
+---
+
+## Phase 5: 推論インターフェース 📋
+
+### 目的
+ReStyle-TTS機能をAPI、CLI、Gradio UIから利用可能にする。
+
+### タスク
+
+#### 5.1 API拡張 (`api.py`)
+- [ ] `use_dcfg`, `lambda_t`, `lambda_a` パラメータ追加
+- [ ] `style_loras` パラメータ追加
+- [ ] `use_olora` パラメータ追加
+
+#### 5.2 CLI拡張 (`infer_cli.py`)
+- [ ] `--lambda-t`, `--lambda-a` 引数追加
+- [ ] `--pitch`, `--energy` 引数追加
+- [ ] `--emotion`, `--emotion-strength` 引数追加
+
+#### 5.3 Gradio UI拡張 (`infer_gradio.py`)
+- [ ] DCFG設定パネル追加（日本語）
+- [ ] スタイル制御スライダー追加
+- [ ] 感情選択ドロップダウン追加
+
+---
+
+## 依存関係
+
+### 既存
+- torch>=2.0.0
+- torchaudio>=2.0.0
+- transformers
+
+### 追加予定
+| パッケージ | Phase | 用途 |
+|-----------|-------|------|
+| peft>=0.7.0 | 2 | LoRAアダプター |
+
+---
+
+## 評価指標
+
+| 指標 | ツール | 説明 |
+|------|--------|------|
+| WER | Whisper-large-v3 | 音声認識精度 |
+| Spk-sv | WavLM base-plus-sv | 話者類似度 |
+| Pitch | Parselmouth | ピッチ制御精度 |
+| Energy | STFT L2 norm | エネルギー制御精度 |
+| Emotion | Emotion2Vec | 感情認識精度 |
+
+---
+
+## 参考文献
+
+- ReStyle-TTS: arXiv:2601.03632
+- F5-TTS: Chen et al. 2024
+- Flow Matching: Lipman et al. 2022
+- LoRA: Hu et al. 2021
+
+---
+
+## 更新履歴
+
+| 日付 | 内容 |
+|------|------|
+| 2026-01-09 | Phase 1 (DCFG) 完了 |
+| 2026-01-09 | ロードマップ作成 |
