@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(uv sync:*)",
+      "Bash(uv python install:*)",
+      "Bash(ls:*)",
+      "Bash(uv cache clean:*)",
+      "Bash(dir:*)",
+      "Bash(del /F uv.lock)",
+      "Bash(uv venv:*)",
+      "Bash(uv lock:*)",
+      "Bash(uv run python:*)",
+      "Bash(git checkout:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(uv run pytest:*)",
+      "Bash(cat:*)",
+      "Bash(uv add:*)",
+      "Bash(git restore:*)"
+    ]
+  }
+}
