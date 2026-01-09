@@ -106,24 +106,67 @@ hf_hub_download(
 
 ## 3. データセットの準備
 
-### 3.1 推奨データセット
+### 3.1 論文再現用データセット（必須）
 
-#### 英語
+ReStyle-TTS論文（arXiv:2601.03632）を再現するには、以下の **英語データセット** を使用します。
+論文では「VccmDataset」という統合データセットを構築しています。
 
 | データセット | サイズ | 用途 | ダウンロード |
 |-------------|--------|------|-------------|
-| LibriTTS | ~500時間 | ピッチ/エネルギー | [OpenSLR](https://openslr.org/60/) |
+| **LibriTTS** | ~585時間 | ピッチ/エネルギー | [OpenSLR](https://openslr.org/60/) |
+| **VCTK** | 110話者 | ピッチ/エネルギー | [Edinburgh DataShare](https://datashare.ed.ac.uk/handle/10283/2950) |
+| **TESS** | 2,800ファイル | 感情（7カテゴリ） | [Kaggle](https://www.kaggle.com/datasets/ejlok1/toronto-emotional-speech-set-tess) |
+
+**重要**: 論文では **英語のみ** で学習・評価されています。
+
+### 3.2 TESSデータセットの構造
+
+TESSには以下の7つの感情カテゴリが含まれます：
+
+| 感情 | スタイル属性名 | ファイル数 |
+|------|--------------|-----------|
+| Angry | `angry` | 400 |
+| Disgust | `disgusted` | 400 |
+| Fear | `fear` | 400 |
+| Happy | `happy` | 400 |
+| Sad | `sad` | 400 |
+| Pleasant Surprise | `surprised` | 400 |
+| Neutral | `neutral` | 400 |
+
+TESSのディレクトリ構造：
+```
+TESS/
+├── OAF_angry/
+├── OAF_disgust/
+├── OAF_fear/
+├── OAF_happy/
+├── OAF_neutral/
+├── OAF_pleasant_surprised/
+├── OAF_sad/
+├── YAF_angry/
+├── YAF_disgust/
+...
+```
+
+### 3.3 代替データセット（実験用）
+
+論文再現以外の実験や、他言語で試す場合：
+
+#### 英語（代替）
+
+| データセット | サイズ | 用途 | ダウンロード |
+|-------------|--------|------|-------------|
 | ESD | 29時間 | 感情 | [GitHub](https://github.com/HLTSingapore/Emotional-Speech-Data) |
 | RAVDESS | 7GB | 感情 | [Zenodo](https://zenodo.org/record/1188976) |
 
-#### 日本語
+#### 日本語（実験用）
 
 | データセット | サイズ | 用途 | ダウンロード |
 |-------------|--------|------|-------------|
 | JVS Corpus | 30時間 | 全般 | [公式サイト](https://sites.google.com/site/shinaborulab/research-topics/jvs_corpus) |
 | JSUT | 10時間 | 全般 | [公式サイト](https://sites.google.com/site/shinaborulab/research-topics/jsut) |
 
-### 3.2 データセット構造
+### 3.4 データセット構造（共通）
 
 学習データセットは以下の構造で準備します：
 
@@ -155,7 +198,7 @@ audio_002.wav|音声合成のテストです。
 - 音声ファイルは 24kHz、モノラル推奨
 - テキストはひらがな/漢字混じりまたはピンイン
 
-### 3.3 自動ラベリング（ピッチ/エネルギー）
+### 3.5 自動ラベリング（ピッチ/エネルギー）
 
 ピッチとエネルギーは音声から自動的にラベリングできます。
 
@@ -241,7 +284,7 @@ if __name__ == "__main__":
     label_dataset(sys.argv[1], sys.argv[2])
 ```
 
-### 3.4 Arrow形式への変換
+### 3.6 Arrow形式への変換
 
 F5-TTS の学習にはArrow形式のデータセットが必要です。
 
@@ -363,6 +406,31 @@ ckpts/ReStyleTTS_Base/
 ├── lora_pitch_high_last.safetensors
 └── ...
 ```
+
+### 4.7 論文再現設定
+
+ReStyle-TTS論文では、各スタイル属性につき **250時間** の学習を実施しています。
+これはエポック数ではなく、総学習時間で管理されています。
+
+```bash
+# 論文再現用（250時間学習）
+uv run python -m f5_tts.train.train_style_lora \
+    --config-name ReStyleTTS_Base \
+    style_attribute=pitch_high \
+    pretrained_checkpoint=checkpoints/F5TTS_v1_Base/model_1200000.safetensors \
+    datasets.name=pitch_high_prepared \
+    optim.max_hours=250
+```
+
+**論文の学習設定:**
+
+| パラメータ | 値 |
+|-----------|-----|
+| 学習時間 | 250時間/スタイル属性 |
+| LoRAランク | 32 |
+| LoRAアルファ | 64 |
+| サンプリングレート | 24kHz |
+| 言語 | 英語のみ |
 
 ---
 
