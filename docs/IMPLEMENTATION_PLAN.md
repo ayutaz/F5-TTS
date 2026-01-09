@@ -4,7 +4,7 @@
 
 F5-TTSをベースにReStyle-TTSの機能を追加実装する。
 
-**現在の進捗**: Phase 1 (DCFG) ✅ 完了 / Phase 2 (Style LoRA) ✅ 完了 / Phase 3 (OLoRA Fusion) ✅ 完了
+**現在の進捗**: Phase 1-4 ✅ 完了 (DCFG, Style LoRA, OLoRA Fusion, TCO)
 
 ## ディレクトリ構造
 
@@ -22,8 +22,8 @@ F5-TTS/
 │   │   ├── dcfg.py             # ✅ 作成済: DCFG実装
 │   │   ├── style_lora.py       # ✅ 作成済: Style LoRA管理 + OLoRA統合
 │   │   ├── olora_fusion.py     # ✅ 作成済: OLoRA直交融合
-│   │   ├── tco.py              # 📋 Phase 4で作成予定
-│   │   └── speaker_encoder.py  # 📋 Phase 4で作成予定
+│   │   ├── tco.py              # ✅ 作成済: TCO損失
+│   │   └── speaker_encoder.py  # ✅ 作成済: WavLM話者エンコーダー
 │   │
 │   ├── configs/
 │   │   └── ReStyleTTS_Base.yaml  # ✅ 作成済
@@ -34,7 +34,8 @@ F5-TTS/
 ├── tests/
 │   ├── test_dcfg.py            # ✅ 作成済 (14テスト)
 │   ├── test_style_lora.py      # ✅ 作成済 (21テスト)
-│   └── test_olora_fusion.py    # ✅ 作成済 (30テスト)
+│   ├── test_olora_fusion.py    # ✅ 作成済 (30テスト)
+│   └── test_tco.py             # ✅ 作成済 (31テスト)
 │
 ├── docs/
 │   ├── ROADMAP.md              # ✅ 作成済
@@ -238,32 +239,62 @@ fused = fusion.fuse({"pitch_high": 1.0, "angry": 0.5})
 
 ---
 
-## Phase 4: TCO (Timbre Consistency Optimization) 📋 未実装
+## Phase 4: TCO (Timbre Consistency Optimization) ✅ 完了
 
 ### 4.1 目的
 DCFGで参照依存を減らした際の音色劣化を補償する。
 
-### 4.2 計画ファイル
+### 4.2 実装済みファイル
 
-#### `src/f5_tts/restyle/speaker_encoder.py`
-- WavLM base-plus-sv を使用した話者埋め込み
+#### `src/f5_tts/restyle/speaker_encoder.py` ✅
+```python
+@dataclass
+class SpeakerEncoderConfig:
+    model_name: str = "microsoft/wavlm-base-plus-sv"
+    pooling: str = "mean"
+    normalize: bool = True
 
-#### `src/f5_tts/restyle/tco.py`
+class SpeakerEncoder(nn.Module):
+    def forward(self, waveform, sample_rate=16000): ...
+    def compute_similarity(self, emb1, emb2): ...
+```
+
+#### `src/f5_tts/restyle/tco.py` ✅
 ```python
 @dataclass
 class TCOConfig:
     lambda_reward: float = 0.2
     beta: float = 5.0
-    mu: float = 0.9  # EMAモメンタム
+    mu: float = 0.9
 
-class TCOTrainer:
-    def compute_weight(self, reward):
-        # w_t = 1 + λ * tanh(β * A_t)
-        ...
+class TCOWeightComputer(nn.Module):
+    def compute_advantage(self, reward): ...
+    def compute_weight(self, advantage): ...
+    def update_baseline(self, reward): ...
+
+class TCOLoss(nn.Module):
+    def forward(self, base_loss, generated_audio=None,
+                reference_audio=None, reward=None): ...
+
+class TCOTrainingMixin:
+    def init_tco(self, config=None): ...
+    def apply_tco_weight(self, loss, gen_audio, ref_audio): ...
 ```
 
-#### `src/f5_tts/model/trainer.py` への修正
-- TCO重み付き損失の適用
+### 4.3 使用方法
+```python
+from f5_tts.restyle import TCOLoss, TCOConfig
+
+# TCOLoss作成
+tco_loss = TCOLoss(config=TCOConfig())
+
+# 訓練ループ内
+weighted_loss, metrics = tco_loss(
+    base_loss,
+    generated_audio=gen_audio,
+    reference_audio=ref_audio,
+)
+```
 
 ---
 
@@ -318,11 +349,10 @@ Phase 3: OLoRA Fusion ✅ 完了
 ├── ✅ StyleLoRAManagerへの統合
 └── ✅ テスト作成・検証 (30テスト)
 
-Phase 4: TCO 📋 未着手
-├── [ ] speaker_encoder.py 作成
-├── [ ] tco.py 作成
-├── [ ] trainer.py 修正
-└── [ ] TCO訓練テスト
+Phase 4: TCO ✅ 完了
+├── ✅ speaker_encoder.py 作成
+├── ✅ tco.py 作成
+└── ✅ テスト作成・検証 (31テスト)
 
 Phase 5: 統合 📋 未着手
 ├── [ ] api.py 拡張
@@ -340,7 +370,8 @@ Phase 5: 統合 📋 未着手
 | `tests/test_dcfg.py` | 16 (14 passed, 2 skipped) | ✅ |
 | `tests/test_style_lora.py` | 21 (21 passed) | ✅ |
 | `tests/test_olora_fusion.py` | 30 (30 passed) | ✅ |
-| **合計** | **67 (65 passed, 2 skipped)** | ✅ |
+| `tests/test_tco.py` | 31 (30 passed, 1 skipped) | ✅ |
+| **合計** | **98 (95 passed, 3 skipped)** | ✅ |
 
 ---
 
@@ -372,6 +403,7 @@ from f5_tts.restyle import StyleLoRAManager
 
 | 日付 | 内容 |
 |------|------|
+| 2026-01-10 | Phase 4 (TCO) 完了 |
 | 2026-01-09 | Phase 3 (OLoRA Fusion) 完了 |
 | 2026-01-09 | Phase 2 (Style LoRA) 完了 |
 | 2026-01-09 | Phase 1 (DCFG) 完了 |

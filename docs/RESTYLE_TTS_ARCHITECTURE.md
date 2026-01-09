@@ -1,6 +1,6 @@
 # ReStyle-TTS アーキテクチャ詳細
 
-> **実装状況**: Phase 1 (DCFG) ✅ 完了 / Phase 2 (Style LoRA) ✅ 完了 / Phase 3 (OLoRA Fusion) ✅ 完了
+> **実装状況**: Phase 1-4 ✅ 完了 (DCFG, Style LoRA, OLoRA Fusion, TCO)
 >
 > 詳細は [IMPLEMENTATION_PLAN.md](./IMPLEMENTATION_PLAN.md) を参照
 
@@ -289,9 +289,9 @@ def olora_fusion(lora_weights: List[Tensor], alphas: List[float]) -> Tensor:
 - **疎性保証**: N << D のため効果的に干渉を除去
 - **訓練不要**: 推論時にのみ適用
 
-### 4.4 TCO (Timbre Consistency Optimization) 📋 未実装
+### 4.4 TCO (Timbre Consistency Optimization) ✅ 実装済み
 
-**計画ファイル**:
+**実装ファイル**:
 - `src/f5_tts/restyle/speaker_encoder.py` - WavLM話者エンコーダー
 - `src/f5_tts/restyle/tco.py` - TCO損失実装
 

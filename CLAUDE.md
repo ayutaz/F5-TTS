@@ -17,7 +17,7 @@ Based on:
 | 1 | DCFG (Decoupled CFG) | ✅ 完了 |
 | 2 | Style LoRA | ✅ 完了 |
 | 3 | OLoRA Fusion | ✅ 完了 |
-| 4 | TCO | 📋 未着手 |
+| 4 | TCO | ✅ 完了 |
 | 5 | 推論インターフェース | 📋 未着手 |
 
 詳細は `docs/IMPLEMENTATION_PLAN.md` を参照。
@@ -94,7 +94,7 @@ Output: Generated Audio
 1. **DCFG (Decoupled CFG)** ✅: Separate text/reference guidance
 2. **Style LoRA** ✅: Attribute-specific adapters (pitch, energy, emotions)
 3. **OLoRA Fusion** ✅: Orthogonal multi-LoRA composition
-4. **TCO** 📋: Timbre consistency optimization
+4. **TCO** ✅: Timbre consistency optimization with speaker similarity reward
 
 ## Key Files
 
@@ -109,6 +109,8 @@ Output: Generated Audio
 - `src/f5_tts/restyle/dcfg.py` - DCFG実装 (DCFGConfig, dcfg_combine)
 - `src/f5_tts/restyle/style_lora.py` - Style LoRA管理 (StyleLoRAManager + OLoRA統合)
 - `src/f5_tts/restyle/olora_fusion.py` - OLoRA直交融合 (OLoRAFusion, fuse_lora_weights)
+- `src/f5_tts/restyle/speaker_encoder.py` - WavLM話者エンコーダー (SpeakerEncoder)
+- `src/f5_tts/restyle/tco.py` - TCO損失 (TCOLoss, TCOWeightComputer)
 - `src/f5_tts/train/train_style_lora.py` - LoRA訓練スクリプト
 
 ### Inference
@@ -123,6 +125,7 @@ Output: Generated Audio
 - `tests/test_dcfg.py` - DCFGテスト (16テスト)
 - `tests/test_style_lora.py` - Style LoRAテスト (21テスト)
 - `tests/test_olora_fusion.py` - OLoRA Fusionテスト (30テスト)
+- `tests/test_tco.py` - TCOテスト (31テスト)
 
 ## DCFG Implementation ✅
 
@@ -206,13 +209,41 @@ interference = fusion.compute_interference("pitch_high", "angry")  # 0.0-1.0
 fused = fusion.fuse({"pitch_high": 1.0, "angry": 0.5})
 ```
 
-## TCO Training (Planned)
+## TCO Implementation ✅
+
+Location: `restyle/tco.py`, `restyle/speaker_encoder.py`
 
 ```python
-# Advantage-weighted flow matching loss
+# Advantage-weighted flow matching loss formula
 w_t = 1 + λ * tanh(β * A_t)
+A_t = r_t - b_t  # advantage = reward - baseline
 L_total = w_t * L_FM
 # λ=0.2, β=5.0, μ=0.9 (EMA baseline)
+
+# Usage
+from f5_tts.restyle import TCOLoss, TCOConfig, SpeakerEncoder
+
+# Create TCO loss
+config = TCOConfig(lambda_reward=0.2, beta=5.0, mu=0.9)
+tco_loss = TCOLoss(config=config)
+
+# In training loop
+base_loss = compute_flow_matching_loss(...)
+weighted_loss, metrics = tco_loss(
+    base_loss,
+    generated_audio=gen_audio,
+    reference_audio=ref_audio,
+)
+
+# Or with pre-computed reward
+from f5_tts.restyle import compute_speaker_similarity
+reward = compute_speaker_similarity(gen_audio, ref_audio)
+weighted_loss, metrics = tco_loss(base_loss, reward=reward)
+
+# Metrics include:
+# - tco_reward_mean: average speaker similarity
+# - tco_baseline: EMA baseline
+# - tco_weight_mean: average loss weight
 ```
 
 ## Development Notes

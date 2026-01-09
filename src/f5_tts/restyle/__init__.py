@@ -5,7 +5,7 @@ This module implements ReStyle-TTS features for F5-TTS:
 - DCFG (Decoupled Classifier-Free Guidance) ✅
 - Style LoRA ✅
 - OLoRA Fusion ✅
-- TCO (Timbre Consistency Optimization) 📋
+- TCO (Timbre Consistency Optimization) ✅
 
 Reference: arXiv:2601.03632
 """
@@ -28,6 +28,18 @@ from f5_tts.restyle.olora_fusion import (
     orthogonalize_loras,
     compute_orthogonal_projection,
 )
+from f5_tts.restyle.speaker_encoder import (
+    SpeakerEncoderConfig,
+    SpeakerEncoder,
+    compute_speaker_similarity,
+)
+from f5_tts.restyle.tco import (
+    TCOConfig,
+    TCOWeightComputer,
+    TCOLoss,
+    TCOTrainingMixin,
+    create_tco_loss,
+)
 
 __all__ = [
     # DCFG
@@ -48,4 +60,14 @@ __all__ = [
     "fuse_lora_weights",
     "orthogonalize_loras",
     "compute_orthogonal_projection",
+    # Speaker Encoder
+    "SpeakerEncoderConfig",
+    "SpeakerEncoder",
+    "compute_speaker_similarity",
+    # TCO
+    "TCOConfig",
+    "TCOWeightComputer",
+    "TCOLoss",
+    "TCOTrainingMixin",
+    "create_tco_loss",
 ]

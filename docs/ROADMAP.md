@@ -20,7 +20,7 @@ ReStyle-TTSは、ゼロショット音声合成における連続的かつ相対
 | 1 | DCFG | ✅ 完了 | `feature/restyle-dcfg` |
 | 2 | Style LoRA | ✅ 完了 | `feature/restyle-dcfg` |
 | 3 | OLoRA Fusion | ✅ 完了 | `feature/restyle-dcfg` |
-| 4 | TCO | 📋 未着手 | - |
+| 4 | TCO | ✅ 完了 | `feature/restyle-dcfg` |
 | 5 | 推論インターフェース | 📋 未着手 | - |
 
 ---
@@ -171,21 +171,22 @@ fused = fusion.fuse({"pitch_high": 1.0, "angry": 0.5})
 
 ---
 
-## Phase 4: TCO (Timbre Consistency Optimization) 📋
+## Phase 4: TCO (Timbre Consistency Optimization) ✅
 
 ### 目的
 DCFGで参照依存を減らした際の音色劣化を補償する。
 
-### タスク
-- [ ] `src/f5_tts/restyle/speaker_encoder.py` - WavLM話者エンコーダー
-- [ ] `src/f5_tts/restyle/tco.py` - アドバンテージ重み付き損失
-- [ ] `trainer.py` 修正
-- [ ] TCO訓練テスト
+### 実装内容
+- [x] `src/f5_tts/restyle/speaker_encoder.py` - WavLM話者エンコーダー
+- [x] `src/f5_tts/restyle/tco.py` - アドバンテージ重み付き損失
+- [x] `tests/test_tco.py` - テスト（31テスト、30 passed, 1 skipped）
 
 ### 数式
 ```
 w_t = 1 + λ * tanh(β * A_t)
 L_total = w_t * L_FM
+A_t = r_t - b_t  (アドバンテージ = 報酬 - ベースライン)
+b_t = μ * b_{t-1} + (1 - μ) * r_t  (EMAベースライン)
 ```
 
 ### ハイパーパラメータ
@@ -194,6 +195,33 @@ L_total = w_t * L_FM
 | λ | 0.2 | 報酬強度 |
 | β | 5.0 | アドバンテージ感度 |
 | μ | 0.9 | EMAモメンタム |
+
+### 使用方法
+```python
+from f5_tts.restyle import TCOLoss, TCOConfig, SpeakerEncoder
+
+# TCO設定
+config = TCOConfig(
+    lambda_reward=0.2,
+    beta=5.0,
+    mu=0.9,
+)
+
+# TCOLoss作成
+tco_loss = TCOLoss(config=config)
+
+# 訓練ループ内
+base_loss = compute_flow_matching_loss(...)
+weighted_loss, metrics = tco_loss(
+    base_loss,
+    generated_audio=gen_audio,
+    reference_audio=ref_audio,
+)
+
+# または事前計算報酬を使用
+reward = compute_speaker_similarity(gen_audio, ref_audio)
+weighted_loss, metrics = tco_loss(base_loss, reward=reward)
+```
 
 ---
 
@@ -260,6 +288,7 @@ ReStyle-TTS機能をAPI、CLI、Gradio UIから利用可能にする。
 
 | 日付 | 内容 |
 |------|------|
+| 2026-01-10 | Phase 4 (TCO) 完了 |
 | 2026-01-09 | Phase 3 (OLoRA Fusion) 完了 |
 | 2026-01-09 | Phase 2 (Style LoRA) 完了 |
 | 2026-01-09 | Phase 1 (DCFG) 完了 |
