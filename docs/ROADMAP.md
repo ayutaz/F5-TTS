@@ -22,6 +22,7 @@ ReStyle-TTSは、ゼロショット音声合成における連続的かつ相対
 | 3 | OLoRA Fusion | ✅ 完了 | `feature/restyle-dcfg` |
 | 4 | TCO | ✅ 完了 | `feature/restyle-dcfg` |
 | 5 | 推論インターフェース | ✅ 完了 | `feature/restyle-dcfg` |
+| 6 | モデル公開 | ✅ 完了 | `feature/restyle-dcfg` |
 
 ---
 
@@ -288,6 +289,40 @@ python src/f5_tts/infer/infer_gradio.py
 
 ---
 
+## Phase 6: モデル公開 ✅
+
+### 目的
+学習済みStyle LoRAモデルをHugging Face Hubで公開し、誰でも利用可能にする。
+
+### 公開モデル
+
+**Repository**: [ayousanz/restyle-tts-style-loras](https://huggingface.co/ayousanz/restyle-tts-style-loras)
+
+| モデル | 説明 | サイズ |
+|--------|------|--------|
+| `pitch_high` | 高いピッチ | 39MB |
+| `pitch_low` | 低いピッチ | 39MB |
+| `energy_high` | 高いエネルギー | 39MB |
+| `energy_low` | 低いエネルギー | 39MB |
+
+### 使用方法
+```python
+from huggingface_hub import hf_hub_download
+from f5_tts.restyle import StyleLoRAManager
+
+# Download LoRA
+lora_path = hf_hub_download(
+    repo_id="ayousanz/restyle-tts-style-loras",
+    filename="loras/pitch_high.safetensors"
+)
+
+# Load and apply
+manager = StyleLoRAManager(model.transformer)
+manager.load_lora("pitch_high", lora_path)
+```
+
+---
+
 ## 依存関係
 
 ### 既存
@@ -327,6 +362,7 @@ python src/f5_tts/infer/infer_gradio.py
 
 | 日付 | 内容 |
 |------|------|
+| 2026-01-20 | Phase 6 (モデル公開) 完了 - Hugging Face Hubに公開 |
 | 2026-01-10 | Phase 5 (推論インターフェース) 完了 |
 | 2026-01-10 | Phase 4 (TCO) 完了 |
 | 2026-01-09 | Phase 3 (OLoRA Fusion) 完了 |

@@ -16,6 +16,8 @@
 
 **Sway Sampling**: Inference-time flow step sampling strategy, greatly improves performance
 
+**ReStyle-TTS**: Continuous and relative style control extension based on [arXiv:2601.03632](https://arxiv.org/abs/2601.03632)
+
 ### Thanks to all the contributors !
 
 ## News
@@ -217,6 +219,58 @@ f5-tts_finetune-gradio
 ```
 
 Read [training & finetuning guidance](src/f5_tts/train) for more instructions.
+
+
+## ReStyle-TTS (Style Control Extension)
+
+This fork includes ReStyle-TTS capabilities for continuous style control in zero-shot TTS.
+
+### Features
+
+- **DCFG (Decoupled CFG)**: Separate control over text and reference audio guidance
+- **Style LoRA**: Attribute-specific adapters for pitch, energy, and emotions
+- **OLoRA Fusion**: Orthogonal multi-LoRA composition without interference
+- **TCO**: Timbre consistency optimization
+
+### Pre-trained Style LoRAs
+
+Available on Hugging Face: [ayousanz/restyle-tts-style-loras](https://huggingface.co/ayousanz/restyle-tts-style-loras)
+
+| Adapter | Description |
+|---------|-------------|
+| `pitch_high` | High pitch style |
+| `pitch_low` | Low pitch style |
+| `energy_high` | High energy style |
+| `energy_low` | Low energy style |
+
+### Quick Start
+
+```python
+from huggingface_hub import hf_hub_download
+from f5_tts.api import F5TTS
+from f5_tts.restyle import StyleLoRAManager
+
+# Initialize TTS
+tts = F5TTS()
+
+# Download and load Style LoRA
+lora_path = hf_hub_download(
+    repo_id="ayousanz/restyle-tts-style-loras",
+    filename="loras/pitch_high.safetensors"
+)
+tts.load_style_loras({"pitch_high": lora_path})
+
+# Generate with style control
+audio, sr, _ = tts.infer(
+    ref_file="reference.wav",
+    ref_text="Reference text",
+    gen_text="Text to generate",
+    use_dcfg=True,
+    style_weights={"pitch_high": 1.0},
+)
+```
+
+See [docs/ROADMAP.md](docs/ROADMAP.md) for detailed documentation.
 
 
 ## [Evaluation](src/f5_tts/eval)

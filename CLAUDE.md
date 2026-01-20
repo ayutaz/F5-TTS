@@ -18,7 +18,8 @@ Based on:
 | 2 | Style LoRA | ✅ 完了 |
 | 3 | OLoRA Fusion | ✅ 完了 |
 | 4 | TCO | ✅ 完了 |
-| 5 | 推論インターフェース | 📋 未着手 |
+| 5 | 推論インターフェース | ✅ 完了 |
+| 6 | モデル公開 | ✅ 完了 |
 
 詳細は `docs/IMPLEMENTATION_PLAN.md` を参照。
 
@@ -255,6 +256,28 @@ weighted_loss, metrics = tco_loss(base_loss, reward=reward)
 - Audio: 24kHz, 100 mel channels, hop_length=256
 - Python version: >=3.10, <3.13 (due to av package compatibility)
 - Tests: `uv run pytest tests/ -v`
+
+## Trained Style LoRA Models
+
+学習済みStyle LoRAモデルはHugging Face Hubで公開:
+- **Repository**: [ayousanz/restyle-tts-style-loras](https://huggingface.co/ayousanz/restyle-tts-style-loras)
+
+| Adapter | Description |
+|---------|-------------|
+| `pitch_high` | 高いピッチ |
+| `pitch_low` | 低いピッチ |
+| `energy_high` | 高いエネルギー |
+| `energy_low` | 低いエネルギー |
+
+```python
+from huggingface_hub import hf_hub_download
+
+# Download LoRA
+lora_path = hf_hub_download(
+    repo_id="ayousanz/restyle-tts-style-loras",
+    filename="loras/pitch_high.safetensors"
+)
+```
 
 ## Documentation
 

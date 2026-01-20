@@ -4,7 +4,7 @@
 
 F5-TTSをベースにReStyle-TTSの機能を追加実装する。
 
-**現在の進捗**: Phase 1-5 ✅ 全完了 (DCFG, Style LoRA, OLoRA Fusion, TCO, 推論インターフェース)
+**現在の進捗**: Phase 1-6 ✅ 全完了 (DCFG, Style LoRA, OLoRA Fusion, TCO, 推論インターフェース, モデル公開)
 
 ## ディレクトリ構造
 
@@ -338,6 +338,43 @@ class F5TTS:
 
 ---
 
+## Phase 6: モデル公開 ✅ 完了
+
+### 6.1 目的
+学習済みStyle LoRAモデルをHugging Face Hubで公開し、コミュニティが利用可能にする。
+
+### 6.2 公開モデル
+
+**Repository**: [ayousanz/restyle-tts-style-loras](https://huggingface.co/ayousanz/restyle-tts-style-loras)
+
+| モデル | ファイル | サイズ |
+|--------|----------|--------|
+| pitch_high | `loras/pitch_high.safetensors` | 39MB |
+| pitch_low | `loras/pitch_low.safetensors` | 39MB |
+| energy_high | `loras/energy_high.safetensors` | 39MB |
+| energy_low | `loras/energy_low.safetensors` | 39MB |
+
+### 6.3 使用方法
+```python
+from huggingface_hub import hf_hub_download
+from f5_tts.restyle import StyleLoRAManager
+
+# Download LoRA from Hugging Face
+lora_path = hf_hub_download(
+    repo_id="ayousanz/restyle-tts-style-loras",
+    filename="loras/pitch_high.safetensors"
+)
+
+# Load and apply
+manager = StyleLoRAManager(model.transformer)
+manager.load_lora("pitch_high", lora_path)
+
+with manager.apply_styles({"pitch_high": 1.0}):
+    output = model.sample(...)
+```
+
+---
+
 ## 実装順序
 
 ```
@@ -370,6 +407,12 @@ Phase 5: 推論インターフェース ✅ 完了
 ├── ✅ infer_gradio.py 拡張（日本語UI）
 ├── ✅ docs/TRAINING_GUIDE.md 作成
 └── ✅ テスト（98テストパス）
+
+Phase 6: モデル公開 ✅ 完了
+├── ✅ Hugging Face Hubにリポジトリ作成
+├── ✅ Style LoRAモデル（4種類）アップロード
+├── ✅ モデルカード（README.md）作成
+└── ✅ config.json作成
 ```
 
 ---
@@ -414,6 +457,8 @@ from f5_tts.restyle import StyleLoRAManager
 
 | 日付 | 内容 |
 |------|------|
+| 2026-01-20 | Phase 6 (モデル公開) 完了 - Hugging Face Hubに公開 |
+| 2026-01-10 | Phase 5 (推論インターフェース) 完了 |
 | 2026-01-10 | Phase 4 (TCO) 完了 |
 | 2026-01-09 | Phase 3 (OLoRA Fusion) 完了 |
 | 2026-01-09 | Phase 2 (Style LoRA) 完了 |
