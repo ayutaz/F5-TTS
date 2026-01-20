@@ -140,24 +140,98 @@ class StyleLoRATrainer(Trainer):
         self.style_attribute = style_attribute
 
     def save_checkpoint(self, step, last=False):
-        """LoRAのみを保存"""
-        if last:
-            save_path = Path(self.checkpoint_path) / f"lora_{self.style_attribute}_last.safetensors"
-        else:
-            save_path = Path(self.checkpoint_path) / f"lora_{self.style_attribute}_{step}.safetensors"
+        """LoRA重みと訓練状態を保存"""
+        save_path = Path(self.checkpoint_path)
+        save_path.mkdir(parents=True, exist_ok=True)
 
-        save_path.parent.mkdir(parents=True, exist_ok=True)
+        # DDPラッパーを外してモデルにアクセス
+        unwrapped_model = self.accelerator.unwrap_model(self.model)
 
         # LoRAパラメータのみ抽出
         lora_state_dict = {}
-        for name, param in self.model.transformer.named_parameters():
+        for name, param in unwrapped_model.transformer.named_parameters():
             if "lora_" in name:
-                lora_state_dict[name] = param.cpu()
+                lora_state_dict[name] = param.cpu().clone()
 
-        # safetensorsで保存
+        # LoRA重みをsafetensorsで保存（推論用）
         from safetensors.torch import save_file
-        save_file(lora_state_dict, save_path)
-        print(f"LoRAチェックポイントを保存: {save_path}")
+        if last:
+            lora_file = save_path / f"lora_{self.style_attribute}_last.safetensors"
+        else:
+            lora_file = save_path / f"lora_{self.style_attribute}_{step}.safetensors"
+        save_file(lora_state_dict, lora_file)
+        print(f"LoRAチェックポイントを保存: {lora_file}")
+
+        # 訓練状態を保存（resume用）
+        training_state = {
+            "update": step,
+            "lora_state_dict": lora_state_dict,
+            "optimizer_state_dict": self.optimizer.state_dict(),
+        }
+        if self.scheduler:
+            training_state["scheduler_state_dict"] = self.scheduler.state_dict()
+
+        if last:
+            state_file = save_path / f"training_state_last.pt"
+        else:
+            state_file = save_path / f"training_state_{step}.pt"
+        torch.save(training_state, state_file)
+        print(f"訓練状態を保存: {state_file}")
+
+    def load_checkpoint(self):
+        """訓練状態を読み込んでresumeする"""
+        save_path = Path(self.checkpoint_path)
+
+        if not save_path.exists():
+            return 0
+
+        # training_state_*.pt を探す
+        state_files = list(save_path.glob("training_state_*.pt"))
+        if not state_files:
+            return 0
+
+        # 最新のファイルを選択（lastを優先、なければ最大のstep）
+        last_file = save_path / "training_state_last.pt"
+        if last_file.exists():
+            latest_file = last_file
+        else:
+            # stepの数値でソート
+            def get_step(f):
+                try:
+                    return int(f.stem.split("_")[-1])
+                except ValueError:
+                    return 0
+            latest_file = max(state_files, key=get_step)
+
+        print(f"訓練状態を読み込み: {latest_file}")
+
+        checkpoint = torch.load(latest_file, map_location="cpu", weights_only=False)
+
+        # LoRA重みを読み込み
+        unwrapped_model = self.accelerator.unwrap_model(self.model)
+        lora_state = checkpoint["lora_state_dict"]
+        current_state = dict(unwrapped_model.transformer.named_parameters())
+        for name, param in lora_state.items():
+            if name in current_state:
+                current_state[name].data.copy_(param)
+        print(f"LoRA重みを読み込みました")
+
+        # Optimizer状態を読み込み（存在する場合のみ）
+        if "optimizer_state_dict" in checkpoint and checkpoint["optimizer_state_dict"]:
+            self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+            print(f"Optimizer状態を読み込みました")
+        else:
+            print(f"Optimizer状態なし - 新しいoptimizerで再開")
+
+        # Scheduler状態を読み込み
+        if self.scheduler and "scheduler_state_dict" in checkpoint:
+            self.scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
+            print(f"Scheduler状態を読み込みました")
+
+        update = checkpoint.get("update", 0)
+        print(f"Update {update} から再開します")
+
+        return update
 
 
 @hydra.main(

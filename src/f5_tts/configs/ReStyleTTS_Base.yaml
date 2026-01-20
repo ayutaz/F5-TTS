@@ -95,7 +95,7 @@ lora:
     - to_k
     - to_v
     - to_out.0
-    - ff.ff.0
+    - ff.ff.0.0
     - ff.ff.2
   dropout: 0.0
   bias: none

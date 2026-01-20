@@ -27,7 +27,7 @@ set -e  # エラー時に停止
 # ========================================
 # 設定
 # ========================================
-CHECKPOINT="checkpoints/F5TTS_v1_Base/model_1200000.safetensors"
+CHECKPOINT="checkpoints/F5TTS_v1_Base/model_1250000.safetensors"
 NUM_GPUS=3
 CONFIG_NAME="ReStyleTTS_Base"
 

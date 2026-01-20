@@ -1,6 +1,8 @@
 import json
 from importlib.resources import files
 
+import numpy as np
+import soundfile as sf
 import torch
 import torch.nn.functional as F
 import torchaudio
@@ -141,7 +143,13 @@ class CustomDataset(Dataset):
         if self.preprocessed_mel:
             mel_spec = torch.tensor(row["mel_spec"])
         else:
-            audio, source_sample_rate = torchaudio.load(audio_path)
+            # Use soundfile instead of torchaudio.load to avoid torchcodec dependency
+            audio_np, source_sample_rate = sf.read(audio_path, dtype="float32")
+            # soundfile returns (samples,) or (samples, channels), convert to (channels, samples)
+            if audio_np.ndim == 1:
+                audio = torch.from_numpy(audio_np).unsqueeze(0)
+            else:
+                audio = torch.from_numpy(audio_np.T)
 
             # make sure mono input
             if audio.shape[0] > 1:
